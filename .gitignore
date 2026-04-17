@@ -1,0 +1,6 @@
+assets/
+.env.dev
+__pycache__/
+.venv/
+.vscode/
+results/

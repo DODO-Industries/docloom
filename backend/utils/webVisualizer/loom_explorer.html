@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DocLoom | Neural 3D Space</title>
+<script src="/libs/msgpack-lite.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+<script>
+/* OrbitControls Global Patch */
+window.addEventListener('load', () => {
+  if (!THREE.OrbitControls && window.OrbitControls) THREE.OrbitControls = window.OrbitControls;
+  console.log("System Initialized: Neural Space Ready.");
+});
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#020408;--panel:rgba(10,14,23,0.85);--a:#818cf8;--a2:#38bdf8;
+  --txt:#e2e8f0;--muted:#475569;--bdr:rgba(255,255,255,0.08);
+}
+body{
+  font-family:'Outfit',sans-serif;color:var(--txt);
+  background:var(--bg);display:grid;
+  grid-template-columns:300px 1fr 400px;
+  height:100vh;overflow:hidden;
+}
+.glass{background:var(--panel);backdrop-filter:blur(24px);border:1px solid var(--bdr);z-index:10;}
+#L, #R{display:flex;flex-direction:column;padding:24px;gap:16px;overflow-y:auto;overflow-x:hidden;}
+#L{border-right:1px solid var(--bdr);}
+#R{border-left:1px solid var(--bdr);}
+
+.brand{
+  font-size:1.2rem;font-weight:700;letter-spacing:5px;
+  background:linear-gradient(120deg,#fff 20%,#818cf8);
+  background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:10px;
+}
+.lbl{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;}
+input, textarea{
+  width:100%;padding:12px;background:rgba(0,0,0,0.4);
+  border:1px solid var(--bdr);border-radius:10px;color:#fff;
+  font-family:'Outfit';font-size:.75rem;transition:all 0.3s;
+}
+input:focus, textarea:focus{outline:none;border-color:var(--a2);box-shadow:0 0 15px rgba(56,189,248,0.15);}
+.btn{
+  padding:12px;border:none;border-radius:10px;width:100%;
+  background:linear-gradient(135deg,#4f46e5,#7c3aed);
+  color:#fff;font-weight:700;font-size:.75rem;letter-spacing:2px;
+  text-transform:uppercase;cursor:pointer;transition:all 0.3s;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(79,70,229,0.5);}
+
+#C{position:relative;background:#000;}
+#hud{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);border:1px solid var(--bdr);border-radius:30px;padding:8px 24px;font-size:.65rem;color:var(--muted);pointer-events:none;display:flex;gap:24px;z-index:20;}
+
+/* ─ INNOVATIVE DETAIL CARDS ─ */
+.card{background:rgba(255,255,255,0.03);border:1px solid var(--bdr);border-radius:16px;padding:20px;margin-bottom:16px;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--a2);}
+.shd{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:3px;margin:20px 0 12px 0;border-left:3px solid var(--a2);padding-left:12px;}
+.mv{font-size:1rem;line-height:1.8;color:rgba(255,255,255,0.9);word-break:break-word;font-weight:300;}
+.score-box{display:flex;align-items:baseline;gap:8px;margin:10px 0;}
+.score{font-size:2.8rem;font-weight:700;color:var(--a2);text-shadow:0 0 20px rgba(56,189,248,0.3);}
+.tag{display:inline-block;padding:4px 12px;margin:3px;border-radius:24px;font-size:.7rem;background:rgba(56,189,248,0.08);color:var(--a2);border:1px solid rgba(56,189,248,0.15);transition:all 0.2s;}
+.tag:hover{background:var(--a2);color:#000;}
+.lnk{padding:12px;border-radius:12px;cursor:pointer;display:flex;align-items:center;gap:12px;font-size:.85rem;margin-bottom:8px;background:rgba(255,255,255,0.02);border:1px solid var(--bdr);transition:all 0.25s;}
+.lnk:hover{background:rgba(56,189,248,0.1);transform:translateX(8px);border-color:var(--a2);}
+.pill{font-size:.55rem;padding:3px 8px;border-radius:4px;font-weight:800;text-transform:uppercase;background:rgba(129,140,248,0.15);color:var(--a);}
+
+#LD{position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.6s;}
+.ring{width:60px;height:60px;border-radius:50%;border:4px solid rgba(56,189,248,0.1);border-top-color:var(--a2);animation:spin 1s cubic-bezier(0.4,0,0.2,1) infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<div id="LD">
+  <div class="ring"></div>
+  <p id="lmsg" style="margin-top:20px;font-size:.7rem;letter-spacing:6px;color:var(--a2)">INITIALIZING NEURAL SPACE</p>
+  <div id="pbar-cont" style="display:none;width:280px;height:4px;background:rgba(255,255,255,0.05);border-radius:10px;margin-top:24px;overflow:hidden">
+    <div id="pbar" style="width:0%;height:100%;background:linear-gradient(90deg, #818cf8, #38bdf8);transition:width 0.4s"></div>
+  </div>
+</div>
+
+<div id="L" class="glass">
+  <div class="brand">DOCLOOM</div>
+  <div><div class="lbl">Neural Path</div><input id="apath" type="text" placeholder="Paste .loom path..."></div>
+  <button class="btn" onclick="loadAtlas()">🚀 Launch Atlas</button>
+  <div class="sep"></div>
+  <div>
+    <div class="lbl">Universal Ingestion</div>
+    <input id="ifile" type="file" accept=".pdf,.txt">
+    <button class="btn" style="margin-top:10px;background:linear-gradient(135deg,#0ea5e9,#38bdf8)" onclick="uploadFile()">📁 Weave Data</button>
+  </div>
+  <div class="sep"></div>
+  <div>
+    <div class="lbl">Live Synapses</div>
+    <textarea id="liveText" placeholder="Stream thoughts..."></textarea>
+    <button class="btn" style="margin-top:10px;background:linear-gradient(135deg,#7c3aed,#db2777)" onclick="liveIngest()">🧬 Quick Weave</button>
+  </div>
+  <div class="sep"></div>
+  <div>
+    <div class="lbl">Cognitive Bridge</div>
+    <input id="query" type="text" placeholder="Ask anything about the Loom...">
+    <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" style="flex:1;background:linear-gradient(135deg,#fbbf24,#f59e0b)" onclick="activateLoom()">🔥 Navigate</button>
+        <button class="btn" style="flex:1;background:linear-gradient(135deg,#3b82f6,#2563eb)" onclick="askAI()">🧠 Think</button>
+    </div>
+  </div>
+</div>
+
+<div id="C">
+  <div id="hud">NEURONS <b id="hv">0</b> · SYNAPSES <b id="he">0</b> · FOCUS <b id="hf">NULL</b></div>
+</div>
+
+<div id="R" class="glass">
+  <div class="shd">Neural Core Decoded</div>
+  <div id="det"><p style="color:var(--muted);font-size:.85rem;padding:20px;text-align:center">Select a glowing neuron to decode its cognitive content.</p></div>
+  <div id="con"></div>
+  <div class="shd">AI Reasoning Context</div>
+  <div id="ai-resp">
+    <p style="color:var(--muted);font-size:.75rem;padding:12px;font-style:italic">The AI is waiting for a cognitive spark...</p>
+  </div>
+</div>
+
+<script>
+const REG={}, EDGES=[], SMAP={}, SCACHE={};
+let rootId=null, focus=null, selId=null;
+
+/* ─ THREE.JS CORE ─ */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 5000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const container = document.getElementById('C');
+renderer.setSize(container.clientWidth, container.clientHeight);
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+camera.position.set(0, 200, 600);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x404040, 2));
+const bloomPoint = new THREE.PointLight(0x38bdf8, 3, 2000); scene.add(bloomPoint);
+
+// Node/Edge storage
+const nodeMeshes = {};
+const edgeLines = [];
+const sphereGeo = new THREE.SphereGeometry(1, 24, 24);
+
+function resize(){
+    const w = container.clientWidth, h = container.clientHeight;
+    renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+window.onresize = resize; resize();
+
+const COL_MAP = { root: 0xffffff, constellation: 0xa78bfa, atlas: 0x38bdf8, shard: 0x34d399, shard_heading: 0xfbbf24, data: 0x64748b };
+
+/* ─ BRANCH EXTENSION LOGIC ─ */
+async function build3DGraph(animateExtension=true){
+    const oldPositions = {};
+    Object.values(nodeMeshes).forEach(m => {
+        oldPositions[m.userData.id] = m.position.clone();
+        scene.remove(m);
+    });
+    edgeLines.forEach(l => scene.remove(l));
+    edgeLines.length = 0;
+    for (let key in nodeMeshes) delete nodeMeshes[key];
+
+    if(!focus || !REG[focus]) return;
+    
+    // 1. Create Central Focus
+    const mainNode = REG[focus];
+    const centralMesh = createNodeMesh(focus, 0, 0, 0, 18, COL_MAP[mainNode.t] || COL_MAP.data);
+    document.getElementById('hf').textContent = mainNode.t.toUpperCase();
+
+    // 2. Create Children with Extension Animation
+    const children = EDGES.filter(e => e.f === focus).map(e => e.t).slice(0, 60);
+    children.forEach((cid, i) => {
+        const phi = Math.acos(-1 + (2 * i) / children.length);
+        const theta = Math.sqrt(children.length * Math.PI) * phi;
+        const radius = 350;
+        
+        const tx = radius * Math.sin(phi) * Math.cos(theta);
+        const ty = radius * Math.sin(phi) * Math.sin(theta);
+        const tz = radius * Math.cos(phi);
+        
+        const nd = REG[cid] || {t:'shard', c:'...'};
+        const mesh = createNodeMesh(cid, 0, 0, 0, 10, COL_MAP[nd.t] || COL_MAP.data);
+        
+        if(animateExtension){
+            // Fly from parent or center to target
+            mesh.userData.targetPos = new THREE.Vector3(tx, ty, tz);
+            mesh.userData.startTime = Date.now() + (i * 20); // Staggered entry
+        } else {
+            mesh.position.set(tx, ty, tz);
+        }
+        createEdge(focus, cid);
+    });
+
+    document.getElementById('hv').textContent = Object.keys(nodeMeshes).length;
+    document.getElementById('he').textContent = edgeLines.length;
+}
+
+function createNodeMesh(id, x, y, z, scale, color){
+    const mat = new THREE.MeshPhongMaterial({ 
+        color: color, 
+        emissive: color, 
+        emissiveIntensity: 0.8,
+        transparent: true,
+        opacity: 0.95
+    });
+    const mesh = new THREE.Mesh(sphereGeo, mat);
+    mesh.position.set(x, y, z);
+    mesh.scale.set(scale, scale, scale);
+    mesh.userData = { id: id };
+    scene.add(mesh);
+    nodeMeshes[id] = mesh;
+    return mesh;
+}
+
+function createEdge(from, to){
+    const geo = new THREE.BufferGeometry();
+    const mat = new THREE.LineBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.15 });
+    const line = new THREE.Line(geo, mat);
+    line.userData = { from, to };
+    scene.add(line);
+    edgeLines.push(line);
+}
+
+function updateEdges(){
+    edgeLines.forEach(line => {
+        const from = nodeMeshes[line.userData.from];
+        const to = nodeMeshes[line.userData.to];
+        if(from && to){
+            line.geometry.setFromPoints([from.position, to.position]);
+        }
+    });
+}
+
+// Raycasting for Interaction
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+container.addEventListener('click', (e) => {
+    console.log("EVENT: click triggered on container");
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(Object.values(nodeMeshes));
+    
+    console.log("DEBUG: Raycast intersects count:", intersects.length);
+    if (intersects.length > 0) {
+        const id = intersects[0].object.userData.id;
+        console.log("HIT: Node ID", id);
+        clickNode(id);
+    }
+});
+
+// Hover Effect
+const tip = document.createElement('div');
+tip.style.position = 'absolute';
+tip.style.display = 'none';
+tip.style.pointerEvents = 'none';
+tip.style.background = 'rgba(8,12,20,0.95)';
+tip.style.backdropFilter = 'blur(12px)';
+tip.style.border = '1px solid rgba(56,189,248,0.4)';
+tip.style.borderRadius = '12px';
+tip.style.padding = '14px';
+tip.style.fontSize = '0.75rem';
+tip.style.maxWidth = '280px';
+tip.style.zIndex = '1000';
+tip.style.boxShadow = '0 10px 40px rgba(0,0,0,0.6)';
+tip.style.color = '#fff';
+document.body.appendChild(tip);
+
+container.addEventListener('mousemove', (e) => {
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(Object.values(nodeMeshes));
+    
+    if (intersects.length > 0) {
+        const id = intersects[0].object.userData.id;
+        const n = REG[id] || {c:'...', t:'shard'};
+        container.style.cursor = 'pointer';
+        tip.style.display = 'block';
+        tip.style.left = (e.clientX + 20) + 'px';
+        tip.style.top = (e.clientY + 10) + 'px';
+        tip.innerHTML = `<b style="color:var(--a2);text-transform:uppercase;font-size:0.6rem;letter-spacing:1px">${n.t}</b><div style="margin-top:6px;line-height:1.5">${n.c.substring(0, 150)}...</div>`;
+    } else {
+        container.style.cursor = 'crosshair';
+        tip.style.display = 'none';
+    }
+});
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    
+    const now = Date.now();
+    const camPos = camera.position;
+
+    Object.values(nodeMeshes).forEach(mesh => {
+        // Animation fly-in
+        if(mesh.userData.targetPos && now > mesh.userData.startTime){
+            mesh.position.lerp(mesh.userData.targetPos, 0.1);
+            if(mesh.position.distanceTo(mesh.userData.targetPos) < 1) delete mesh.userData.targetPos;
+        }
+
+        // Distance Pulse
+        const dist = camPos.distanceTo(mesh.position);
+        mesh.material.emissiveIntensity = Math.max(0.4, 2.5 - (dist / 700));
+        
+        // Focus Effect
+        if(mesh.userData.id === selId){
+            const s = 1.2 + Math.sin(now * 0.005) * 0.1;
+            mesh.scale.set(s*10, s*10, s*10);
+            mesh.material.emissiveIntensity = 4;
+        }
+    });
+
+    updateEdges();
+    renderer.render(scene, camera);
+}
+
+/* ─ API LOGIC ─ */
+async function loadAtlas(){
+  console.log("EVENT: loadAtlas triggered");
+  let p=document.getElementById('apath').value.trim(); 
+  console.log("DEBUG: Path input is:", p);
+  if(!p) { console.warn("WARNING: No path provided"); return; }
+  p = p.replace(/^["']|["']$/g, ''); 
+  
+  const ld=document.getElementById('LD'); ld.style.display='flex'; ld.style.opacity='1';
+  try{
+    console.log("FETCH: Requesting /loom/api/load?path=" + encodeURIComponent(p));
+    const r=await fetch(`/loom/api/load?path=${encodeURIComponent(p)}`);
+    console.log("RESPONSE: Status", r.status);
+    if(!r.ok) throw new Error(`Server returned ${r.status}: ${r.statusText}`);
+    
+    const buf = await r.arrayBuffer();
+    console.log("DECODE: Data size", buf.byteLength);
+    const d=msgpack.decode(new Uint8Array(buf));
+    if(!d || !d.g) throw new Error("Invalid .loom format (Master Atlas expected)");
+    
+    console.log("GRAPH: Nodes found", Object.keys(d.g.n || {}).length);
+    Object.assign(REG, d.g.n || {}); 
+    (d.g.e || []).forEach(e=>EDGES.push(e));
+    Object.assign(SMAP, d.map || {});
+    
+    rootId=Object.keys(REG).find(id=>REG[id].t==='root')||Object.keys(REG)[0];
+    console.log("FOCUS: Root ID", rootId);
+    focus=rootId; build3DGraph();
+  }catch(e){
+    console.error("CRITICAL ERROR:", e);
+    alert("Load Error: " + e.message);
+  }
+  ld.style.opacity='0'; setTimeout(()=>ld.style.display='none',500);
+}
+
+async function showDetail(id){
+    selId = id;
+    if(!REG[id]) await fetchShard(id);
+    const n = REG[id]||{}; const m = n.m||{};
+    
+    // Rich Information Rendering
+    let media = "";
+    if(m.binary) media = `<div class="lbl">Neural Image</div><img src="data:image/png;base64,${m.binary}" style="width:100%;border-radius:12px;margin:10px 0;border:1px solid var(--bdr)">`;
+    if(m.table) media += `<div class="lbl">Structured Data</div><div style="font-family:'JetBrains Mono';font-size:.65rem;background:rgba(0,0,0,0.4);padding:10px;border-radius:8px;max-height:200px;overflow:auto;color:var(--a2)">${JSON.stringify(m.table,null,2)}</div>`;
+
+    document.getElementById('det').innerHTML = `
+        <div class="card">
+            <div class="pill">${n.t}</div>
+            <div class="mv">${n.c || "Decoding..."}</div>
+            <div class="shd" style="margin-top:15px">${m.activation_score ? 'Neural Activation' : 'Neural Truth Weight'}</div>
+            <div class="score-box">
+                <span class="score">${(m.activation_score || m.truth_score || 0.1).toFixed(4)}</span>
+                <span class="lbl">${m.activation_score ? 'Σ-RELEVANCE' : 'σ-STABILITY'}</span>
+            </div>
+            ${media}
+        </div>
+        <div class="lbl">Knowledge Tags</div>
+        <div style="margin-bottom:20px">${(m.concepts||[]).map(c=>`<span class="tag">${c}</span>`).join('')}</div>
+        <div class="lbl">Source Context</div>
+        <div style="font-size:.7rem;color:var(--muted)">PAGE: ${m.page || 'GLOBAL'} · ATOM ID: ${id.substring(0,8)}</div>
+    `;
+
+    const links = EDGES.filter(e=>e.f===id||e.t===id);
+    document.getElementById('con').innerHTML = links.map(l=>{
+        const target = l.f===id ? l.t : l.f;
+        const tnd = REG[target]||{c:target, t:'shard'};
+        return `<div class="lnk" onclick="clickNode('${target}')">
+            <span class="pill" style="opacity:0.6">${l.r}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tnd.c.substring(0,35)}</span>
+        </div>`;
+    }).join('');
+}
+
+async function fetchShard(nid){
+    const sid=SMAP[nid]; if(sid===undefined) return;
+    if(SCACHE[sid]) { Object.assign(REG, SCACHE[sid]); return; }
+    let p=document.getElementById('apath').value.trim().replace(/^["']|["']$/g, '');
+    try{
+        const r=await fetch(`/loom/api/load_shard?master_path=${encodeURIComponent(p)}&shard_id=${sid}`);
+        if(!r.ok) return;
+        const d=msgpack.decode(new Uint8Array(await r.arrayBuffer()));
+        
+        // Merge nodes
+        SCACHE[sid]=d.n; 
+        Object.assign(REG, d.n);
+        
+        // Step 1 Fix: Merge local edges from shard
+        if(d.e && Array.isArray(d.e)){
+            d.e.forEach(e => {
+                // Prevent duplicate edges
+                if(!EDGES.some(existing => existing.f === e.f && existing.t === e.t && existing.r === e.r)){
+                    EDGES.push(e);
+                }
+            });
+        }
+        console.log(`Lazy-loaded shard ${sid}: ${Object.keys(d.n).length} nodes, ${d.e?.length || 0} edges.`);
+    }catch(e){}
+}
+
+function clickNode(id){ focus=id; build3DGraph(true); showDetail(id); }
+
+// ... (Rest of Ingestion Logic) ...
+async function uploadFile() {
+  const fileInput = document.getElementById('ifile'); if(!fileInput.files[0]) return;
+  const formData = new FormData(); formData.append('file', fileInput.files[0]);
+  const ld = document.getElementById('LD'); ld.style.display = 'flex'; ld.style.opacity = '1';
+  document.getElementById('pbar-cont').style.display = 'block';
+  try {
+    const r = await fetch('/loom/api/upload', { method: 'POST', body: formData });
+    const d = await r.json();
+    if (d.success) {
+        if (d.shards) {
+            d.shards.forEach((s,i)=>{const id=`live_${Date.now()}_${i}`; REG[id]={t:'shard',c:s.text,m:{}}; EDGES.push({f:focus||rootId,t:id,r:'live'});});
+            build3DGraph(); hideLoader();
+        } else if (d.job_id) pollStatus(d.job_id);
+    }
+  } catch(e) { hideLoader(); }
+}
+async function pollStatus(jobId) {
+    const r = await fetch(`/loom/api/status?job_id=${jobId}`); const d = await r.json();
+    if (d.p >= 0) {
+        document.getElementById('pbar').style.width = d.p + '%';
+        document.getElementById('lmsg').textContent = d.m.toUpperCase();
+        if (d.p < 100) setTimeout(() => pollStatus(jobId), 1000); else { hideLoader(); alert("Neural Atlas Woven!"); }
+    } else hideLoader();
+}
+function hideLoader() { document.getElementById('LD').style.opacity = '0'; setTimeout(() => { document.getElementById('LD').style.display = 'none'; document.getElementById('pbar-cont').style.display = 'none'; }, 600); }
+async function liveIngest(){
+  const text=document.getElementById('liveText').value; if(!text) return;
+  const r=await fetch('/loom/api/live_ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+  const d=await r.json();
+  d.shards.forEach((s,i)=>{const id=`live_${Date.now()}_${i}`; REG[id]={t:'shard',c:s.text,m:{}}; EDGES.push({f:focus||rootId,t:id,r:'live'});});
+  build3DGraph();
+}
+async function activateLoom(){
+  const query=document.getElementById('query').value, path=document.getElementById('apath').value.replace(/^["']|["']$/g, '');
+  if(!query || !path) return;
+  const r=await fetch('/loom/api/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({master_path:path,query})});
+  const d=await r.json(); 
+  if(d.success){ 
+    (d.activation_path || []).forEach(unit => {
+        if(REG[unit.id]) REG[unit.id].m.activation_score = unit.score;
+    });
+    focus=d.entry_point; build3DGraph(); showDetail(focus); 
+  }
+}
+
+async function askAI(){
+    const query=document.getElementById('query').value, path=document.getElementById('apath').value.replace(/^["']|["']$/g, '');
+    if(!query || !path) return;
+    
+    const respDiv = document.getElementById('ai-resp');
+    respDiv.innerHTML = `<div class="card" style="border-color:var(--a);animation:pulse 2s infinite">
+        <div class="pill">Thinking...</div>
+        <div class="mv" style="font-size:0.8rem">Traversing the Neural Loom to find the most accurate facts...</div>
+    </div>`;
+
+    try {
+        const r = await fetch('/ai/ask', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ master_path: path, query: query })
+        });
+        const d = await r.json();
+        
+        if(d.success){
+            respDiv.innerHTML = `
+                <div class="card" style="border-color:var(--a)">
+                    <div class="pill">Response</div>
+                    <div class="mv" style="font-size:0.85rem;line-height:1.6">${d.answer.replace(/\n/g, '<br>')}</div>
+                    <div class="shd" style="margin-top:12px">Citations</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px">
+                        ${d.citations.map(cid => `<span class="tag" style="font-size:0.6rem;cursor:pointer" onclick="clickNode('${cid}')">${cid.substring(0,8)}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+            // Also update graph focus to the entry hub
+            if(d.entry_hub){
+                focus = d.entry_hub;
+                build3DGraph();
+                showDetail(focus);
+            }
+        } else {
+            respDiv.innerHTML = `<div class="card" style="border-color: #ef4444">
+                <div class="pill" style="background:rgba(239,68,68,0.2);color:#ef4444">Error</div>
+                <div class="mv">${d.detail || "AI Bridge Failed"}</div>
+            </div>`;
+        }
+    } catch(e) {
+        respDiv.innerHTML = `<div class="card" style="border-color: #ef4444"><div class="mv">${e.message}</div></div>`;
+    }
+}
+
+animate();
+document.getElementById('LD').style.display='none';
+</script>
+</body>
+</html>

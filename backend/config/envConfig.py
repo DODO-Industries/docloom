@@ -12,6 +12,23 @@ IMPT_LOGS = os.getenv("IMPT_LOGS", "false").lower() == "true"
 SERVICE_LOGS = os.getenv("SERVICE_LOGS", "false").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG" if ENV == "DEV" else "INFO")
 
+# LLM Configuration
+DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "GENAI")
+LLM_LOGS = os.getenv("LLM_LOGS", "false").lower() == "true"
+
+# Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+# Local LM Studio
+LOCAL_LM_HOST = os.getenv("LOCAL_LM_HOST", "http://127.0.0.1:1234")
+LOCAL_LM_MODEL_BASE = os.getenv("LOCAL_LM_MODEL_BASE")
+
+# Custom GenAI Proxy
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")
+GENAI_URL = os.getenv("GENAI_URL")
+GENAI_MODEL = os.getenv("GENAI_MODEL")
+
 def setup_logger(name):
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))

@@ -1,10 +1,10 @@
 import os
 import sys
 import numpy as np
-import datetime
 import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
+from backend.services.loom_service.substrate import NeuralViewer, LoomNavigator
 from backend.services.loom_service.cognition import GlobalCognitiveState
 
 def print_header(text):
@@ -14,7 +14,76 @@ def print_header(text):
 
 def run_cognitive_simulation():
     print_header("DOCLOOM PHASE 3: CONTINUOUS SEMANTIC SUBSTRATE TEST")
-    print("[1/6] INITIALIZING VECTOR-SPACE STATE...")
+    
+    # ---------------------------------------------------------
+    # [0/6] VALIDATING IN-MEMORY SUBSTRATE (NEURAL VIEWER)
+    # ---------------------------------------------------------
+    print("[0/6] VALIDATING IN-MEMORY SUBSTRATE TRAVERSAL & SEARCH...")
+    mock_data = {
+        "v": "1.3",
+        "type": "atlas_master",
+        "map": {},  # No shards, everything is in-memory for testing
+        "bridge": {
+            "gravity": [{"n": "shard_1", "s": 1.0}],
+            "spacetime": [{"n": "shard_2", "s": 0.9}]
+        },
+        "g": {
+            "n": {
+                "root_id": {"t": "root", "c": "Document Root", "m": {}},
+                "const_1": {"t": "constellation", "c": "Cosmology Constellation", "m": {"centroid": [0.1, 0.2, 0.3]}},
+                "atlas_1": {"t": "atlas", "c": "Spacetime Atlas", "m": {"centroid": [0.2, 0.3, 0.4]}},
+                "shard_1": {"t": "shard", "c": "Gravity is the curvature of the universe", "m": {"truth_score": 0.9}},
+                "shard_2": {"t": "shard", "c": "Massive objects warp the fabric of spacetime", "m": {"truth_score": 0.8}},
+                "shard_3": {"t": "shard", "c": "Light bends around massive galaxies", "m": {"truth_score": 0.85}},
+            },
+            "e": [
+                {"f": "root_id", "t": "const_1", "r": "contains", "s": 1.0},
+                {"f": "const_1", "t": "atlas_1", "r": "contains", "s": 1.0},
+                {"f": "atlas_1", "t": "shard_1", "r": "contains", "s": 1.0},
+                {"f": "shard_1", "t": "shard_2", "r": "similarity", "s": 0.9},
+                {"f": "shard_2", "t": "shard_3", "r": "contextual_association", "s": 0.8},
+            ]
+        }
+    }
+    
+    # Initialize NeuralViewer with mock graph
+    viewer = NeuralViewer()
+    viewer.data = mock_data
+    viewer._build_adjacency()
+    
+    # 1. Test BFS Traversal
+    bfs_res = viewer.bfs_traversal("shard_1", max_depth=2)
+    assert len(bfs_res) > 0, "BFS traversal returned empty results"
+    print(f"  [+] BFS Traversal from 'shard_1' verified. Visited {len(bfs_res)} nodes.")
+    
+    # 2. Test Beam Search
+    beam_res = viewer.beam_search("shard_1", beam_width=2, max_depth=3)
+    assert len(beam_res) > 0, "Beam search returned empty results"
+    print(f"  [+] Beam Search reasoning paths verified. Visited {len(beam_res)} nodes.")
+    
+    # 3. Test Concept Jumps
+    jump_res = viewer.concept_jump("gravity")
+    assert len(jump_res) == 1 and jump_res[0]["id"] == "shard_1", "Concept jump failed"
+    print("  [+] Concept Bridge Jump verified ('gravity' -> 'shard_1').")
+    
+    # 4. Test Heuristic Hub Centroid Jumps
+    centroids = {"atlas_1": np.array([0.2, 0.3, 0.4])}
+    best_id, sim = viewer.heuristic_jump(np.array([0.21, 0.31, 0.41]), centroids)
+    assert best_id == "atlas_1", "Heuristic jump resolved to wrong hub"
+    print(f"  [+] Heuristic Centroid Jump verified (best hub: '{best_id}' with similarity {sim:.3f}).")
+    
+    # 5. Test LoomNavigator wrapper
+    nav = LoomNavigator(mock_data)
+    nav_beam_res = nav.beam_search("shard_1", beam_width=2, max_depth=3)
+    assert len(nav_beam_res) == len(beam_res), "LoomNavigator wrapper output mismatch"
+    print("  [+] LoomNavigator backward-compatibility wrapper verified.")
+    
+    print("[+] Substrate layer validation successful.")
+
+    # ---------------------------------------------------------
+    # [1/6] INITIALIZING VECTOR-SPACE STATE
+    # ---------------------------------------------------------
+    print("\n[1/6] INITIALIZING VECTOR-SPACE STATE...")
     state = GlobalCognitiveState()
     
     # Initialize the field and model to dynamically get dimension

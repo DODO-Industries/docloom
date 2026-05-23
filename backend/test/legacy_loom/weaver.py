@@ -8,7 +8,7 @@ from collections import Counter
 from sklearn.cluster import KMeans
 from sklearn.neighbors import NearestNeighbors
 from backend.config.envConfig import setup_logger, log_service
-from backend.services.loom_service.substrate.transformer import LoomTransformer
+from backend.test.legacy_loom.transformer import LoomTransformer
 
 logger = setup_logger("LoomWeaver")
 
@@ -70,6 +70,8 @@ class LoomWeaver:
             std_dev = statistics.stdev(font_sizes) if len(font_sizes) > 1 else 0
             threshold = mode_size + (1.5 * std_dev)
 
+        # threshold = mode_size + (1.5 * std_dev)
+        # current_hierarchy_stack = [self.doc_root_id]
         current_hierarchy_stack = [self.doc_root_id]
 
         # 1. Cognitive Weaving (Direct Conceptual Ingestion)
@@ -248,6 +250,8 @@ class LoomWeaver:
                     # Keep top 10 per concept for sanity & ranking
                     self.concept_bridge[c_hash].sort(key=lambda x: x["s"], reverse=True)
                     self.concept_bridge[c_hash] = self.concept_bridge[c_hash][:10]
+                    
+                    # Normalization (optional, since score is already normalized by tau)
 
     def _form_atlases(self, node_ids, embeddings):
         """Clusters CONTENT nodes into Atlases."""
@@ -316,6 +320,7 @@ class LoomWeaver:
             const_id = const_id_map[cluster_id]
             self.connect(const_id, atlas_ids[i], "contains")
 
+
     def _save_shards(self, base_path):
         """
         Creates a master 'atlas.loom' architecture with partitioned edges.
@@ -347,6 +352,8 @@ class LoomWeaver:
         
         for edge in self.edges:
             f_id, t_id = edge["f"], edge["t"]
+            f_node = self.nodes.get(f_id)
+            t_node = self.nodes.get(t_id)
             
             # If both are in the same shard, it's local
             if f_id in node_shard_map and t_id in node_shard_map and node_shard_map[f_id] == node_shard_map[t_id]:

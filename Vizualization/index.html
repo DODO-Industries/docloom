@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DocLoom | Cognitive Sandbox Visualizer</title>
+<!-- CDN Packages for standalone file:/// executions -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/msgpack-lite/0.1.26/msgpack-lite.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #020408;
+  --panel: rgba(9, 11, 19, 0.85);
+  --a: #818cf8;
+  --a-glow: rgba(129, 140, 248, 0.25);
+  --a2: #38bdf8;
+  --a2-glow: rgba(56, 189, 248, 0.25);
+  --txt: #f3f4f6;
+  --muted: #4b5563;
+  --bdr: rgba(255, 255, 255, 0.06);
+  --glass-bdr: rgba(255, 255, 255, 0.08);
+}
+body {
+  font-family: 'Outfit', sans-serif;
+  color: var(--txt);
+  background: var(--bg);
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+.glass {
+  background: var(--panel);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-bdr);
+  z-index: 10;
+}
+#L {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  bottom: 20px;
+  width: 320px;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+#R {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  bottom: 20px;
+  width: 360px;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+#L, #R {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.brand {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, #ffffff, #818cf8, #38bdf8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 2px;
+  text-shadow: 0 0 30px rgba(129, 140, 248, 0.1);
+}
+.lbl {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.sep {
+  height: 1px;
+  background: var(--bdr);
+  margin: 6px 0;
+}
+input, textarea, select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  color: #fff;
+  font-family: 'Outfit';
+  font-size: 0.8rem;
+  transition: all 0.25s;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--a2);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
+.btn {
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  width: 100%;
+  background: linear-gradient(135deg, #4f46e5, #0ea5e9);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35);
+}
+.btn:active {
+  transform: translateY(0);
+}
+
+#C { position: absolute; inset: 0; z-index: 1; background: #010204; }
+#hud {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(5, 7, 13, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--bdr);
+  border-radius: 30px;
+  padding: 8px 20px;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  pointer-events: none;
+  display: flex;
+  gap: 15px;
+  z-index: 20;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+#hud b { color: var(--a2); }
+
+/* Card styles */
+.card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--bdr);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--a2);
+}
+.card.warn::before {
+  background: #f59e0b;
+}
+
+.shd {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 8px 0 6px 0;
+  border-left: 2px solid var(--a2);
+  padding-left: 8px;
+  font-weight: 700;
+}
+.mv {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  word-break: break-word;
+  font-weight: 300;
+}
+.tag {
+  display: inline-block;
+  padding: 3px 8px;
+  margin: 2px;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  background: rgba(56, 189, 248, 0.05);
+  color: var(--a2);
+  border: 1px solid rgba(56, 189, 248, 0.12);
+  transition: all 0.2s;
+}
+.tag:hover {
+  background: var(--a2);
+  color: #000;
+}
+.pill {
+  font-size: 0.55rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  letter-spacing: 0.5px;
+}
+
+/* Telemetry Circular Gauges and Graphs */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gauge-card {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--bdr);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.gauge-title {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+.gauge-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--txt);
+}
+.canvas-container {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 8px;
+  border: 1px solid var(--bdr);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+/* Narrative items */
+.narrative-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid var(--bdr);
+  font-size: 0.7rem;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #6b7280;
+}
+.narrative-item.active {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: var(--a2);
+  color: #fff;
+}
+.player-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.player-btn {
+  flex: 1;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--bdr);
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+/* 3D Label Overlay */
+.node-label {
+  position: absolute;
+  color: #fff;
+  font-family: 'Outfit';
+  font-size: 0.65rem;
+  padding: 3px 6px;
+  background: rgba(3, 5, 12, 0.85);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  border-radius: 5px;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  opacity: 0.85;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: none; /* Hidden by default to keep sphere structure clean */
+}
+.node-label:hover {
+  background: rgba(129, 140, 248, 0.35);
+  border-color: rgba(56, 189, 248, 0.8);
+  opacity: 1;
+  transform: translate(-50%, -105%) scale(1.05);
+}
+.node-label.active-inspect {
+  display: block; /* Show only when inspected */
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.95);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.45);
+  opacity: 1;
+}
+
+
+/* Agent Console Section */
+.agent-console {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--bdr);
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 100px;
+  overflow-y: auto;
+  color: #10b981;
+}
+</style>
+</head>
+<body>
+
+<div id="LD">
+  <div class="ring"></div>
+  <p id="lmsg" style="margin-top:16px;font-size:.65rem;letter-spacing:4px;color:var(--a2)">INITIALIZING COGNITIVE INTERFACE</p>
+</div>
+
+<div id="L" class="glass">
+  <div class="brand">DOCLOOM</div>
+  <div style="font-size:0.55rem;color:#6b7280;letter-spacing:1px;margin-bottom:8px;margin-top:-6px">SANDBOX COGNITIVE SUSTRATE</div>
+
+  <div>
+    <div class="lbl">Inject Thought Synapse</div>
+    <input id="sim-text" type="text" placeholder="Enter thought (e.g. Gravity bends spacetime)..." style="margin-bottom:6px" onkeyup="if(event.key==='Enter') injectCustomThought()">
+    
+    <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:#9ca3af;margin-bottom:2px">
+      <span>INTENSITY</span><span id="intensity-val">0.90</span>
+    </div>
+    <input id="sim-intensity" type="range" min="0.1" max="1" step="0.05" value="0.9" oninput="document.getElementById('intensity-val').textContent=parseFloat(this.value).toFixed(2)" style="margin-bottom:8px">
+    
+    <div class="lbl">Intent / Goal Constraints</div>
+    <input id="sim-goal" type="text" placeholder="Goal (e.g. build_app, research)..." style="margin-bottom:6px">
+    
+    <div class="lbl">Terminal Command sandbox</div>
+    <input id="sim-command" type="text" placeholder="Command (e.g. dir, rm)..." style="margin-bottom:8px">
+
+    <button class="btn" onclick="injectCustomThought()">🧬 Inject Synapse</button>
+  </div>
+
+  <div class="sep"></div>
+
+  <button class="btn" style="background:linear-gradient(135deg, #ef4444, #b91c1c); margin-bottom: 12px;" onclick="clearBrainMemory()">🗑️ Clear Brain Memory</button>
+
+  <div class="sep"></div>
+
+  <div>
+    <div class="lbl">Query Memory Probe</div>
+    <input id="query-text" type="text" placeholder="Enter search query (e.g. gravity, learning)..." style="margin-bottom:6px" onkeyup="if(event.key==='Enter') queryMemory()">
+    <div style="display:flex; gap:6px; margin-bottom:8px;">
+      <button class="btn" style="background:linear-gradient(135deg, #10b981, #059669);" onclick="queryMemory()">🔍 Query Memory</button>
+      <button class="btn" style="background:rgba(255,255,255,0.05); border:1px solid var(--bdr); flex:0.4; font-size:0.65rem;" onclick="clearQueryProbe()">❌ Clear</button>
+    </div>
+  </div>
+
+  <button class="btn" style="background:linear-gradient(135deg, #818cf8, #4f46e5); margin-bottom: 12px;" onclick="runMemoryStressTest()">🧪 Load 1000+ Shards Test</button>
+
+  <div class="shd">Substrate Legend</div>
+  <div style="font-size: 0.7rem; line-height: 1.6; color: #9ca3af; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--bdr); margin-bottom: 12px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#34d399">🟢</span> <span>Stored Concept Shard</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#fbbf24">🟡</span> <span>Active Spotlight (Attention focus)</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#38bdf8">🔵</span> <span>latent_field Orb (Consciousness)</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#818cf8">🟣</span> <span>working_latent Orb (Working memory)</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#fbbf24">🔶</span> <span>Abstraction Crystal (Meta-Shard)</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#a78bfa">🕸️</span> <span>Attractor Basin (Crystallized Assembly)</span>
+    </div>
+  </div>
+
+  <div class="shd">Cognitive Workflow</div>
+  <div style="font-size: 0.65rem; line-height: 1.5; color: #9ca3af; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--bdr);">
+    <b>1. Perception:</b> Input is parsed into atomic thought shards.<br>
+    <b>2. Resonance:</b> Shards trigger competitive spring dynamics in vector space.<br>
+    <b>3. Attraction:</b> Repetitive thoughts form stable attractor basins (assemblies).<br>
+    <b>4. Abstraction:</b> Highly coherent concepts merge into meta-shards.<br>
+    <b>5. Persistence:</b> Complete memory is saved to <code>brain_state.json</code> in real-time.
+  </div>
+</div>
+
+<div id="C">
+  <div id="hud">NODES <b id="hv">0</b> · CAUSAL LINKS <b id="he">0</b> · STATE <b id="hf">NULL</b></div>
+  <div id="labels-container" style="position:absolute;inset:0;pointer-events:none;z-index:5"></div>
+</div>
+
+<div id="R" class="glass">
+  <div class="shd">Neuron Inspector</div>
+  <div id="neuron-inspector" class="card" style="border-color: var(--a); min-height:80px; transition: all 0.3s;">
+    <p style="color:var(--muted); font-size:0.75rem; text-align:center;">Click a concept node in 3D to decode its cognitive properties.</p>
+  </div>
+
+  <div class="shd">Substrate Telemetry HUD</div>
+  <div class="telemetry-grid">
+    <div class="gauge-card">
+      <div id="val-energy" class="gauge-value">1.00</div>
+      <div class="gauge-title">Energy</div>
+    </div>
+    <div class="gauge-card">
+      <div id="val-coherence" class="gauge-value">1.00</div>
+      <div class="gauge-title">Coherence</div>
+    </div>
+    <div class="gauge-card">
+      <div id="val-entropy" class="gauge-value">0.00</div>
+      <div class="gauge-title">Entropy</div>
+    </div>
+    <div class="gauge-card">
+      <div id="val-surprise" class="gauge-value">0.00</div>
+      <div class="gauge-title">Surprise</div>
+    </div>
+  </div>
+
+  <div class="lbl">Cognitive Field History</div>
+  <div class="canvas-container">
+    <canvas id="chart-canvas" width="340" height="80" style="width:100%;height:100%"></canvas>
+  </div>
+
+  <div id="sim-mode-card" class="card">
+    <div class="pill" id="sim-cognitive-mode">EXPLORATION</div>
+    <div class="mv" id="sim-thought-desc" style="font-size:0.75rem;margin-top:4px">System state initializing...</div>
+  </div>
+
+  <div class="shd">Emergent Abstractions & Active assemblies</div>
+  <div id="sim-assemblies" style="max-height:80px;overflow-y:auto;font-size:0.7rem;color:#6b7280;margin-bottom:4px">
+    No active assemblies crystallized.
+  </div>
+
+  <div class="shd">Workspace Working Memory</div>
+  <div id="sim-wm-status" style="max-height:80px;overflow-y:auto;font-size:0.7rem;color:#6b7280;margin-bottom:4px">
+    Workspace empty.
+  </div>
+
+  <div class="shd">Agent Planner & Execution Sandbox</div>
+  <div class="lbl">HTN PLAN TREE</div>
+  <div id="agent-planner-tree" class="agent-console" style="margin-bottom:4px;color:#38bdf8">NO ACTIVE PLAN</div>
+  
+  <div class="lbl">SANDBOX CMD AUDIT LOGS</div>
+  <div id="agent-execution-logs" class="agent-console" style="color:#f59e0b">SANDBOX ARMED</div>
+</div>
+
+<script>
+/* ─ DETECT HOST RESOLUTION ─ */
+const API_BASE = (window.location.protocol === 'file:' || window.location.port !== '8000') ? 'http://localhost:8000' : '';
+console.log("Auto-resolved API base path:", API_BASE);
+
+/* ─ THREE.JS INITIALIZATION ─ */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 5000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const container = document.getElementById('C');
+renderer.setSize(container.clientWidth, container.clientHeight);
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+camera.position.set(0, 300, 700);
+
+scene.add(new THREE.AmbientLight(0x161c2e, 2.5));
+const bloomPoint = new THREE.PointLight(0x38bdf8, 3, 2000);
+scene.add(bloomPoint);
+const dirLight = new THREE.DirectionalLight(0x818cf8, 1);
+dirLight.position.set(100, 300, 100);
+scene.add(dirLight);
+
+// Add Fog and Scene Background to create a beautiful, infinite cosmos look
+scene.background = new THREE.Color(0x010204);
+scene.fog = new THREE.FogExp2(0x010204, 0.0006);
+
+// Add subtle 3D Grid Helper for spatial grounding (large size + divisions for infinite look)
+const gridHelper = new THREE.GridHelper(10000, 200, 0x818cf8, 0x1e293b);
+gridHelper.position.y = 0; // Align with the axes helper origin center point
+gridHelper.material.opacity = 0.25;
+gridHelper.material.transparent = true;
+scene.add(gridHelper);
+
+// Add subtle Axes Helper for the origin center point (X=Red, Y=Green, Z=Blue)
+const axesHelper = new THREE.AxesHelper(200);
+axesHelper.material.opacity = 0.5;
+axesHelper.material.transparent = true;
+scene.add(axesHelper);
+
+const simGroup = new THREE.Group();
+scene.add(simGroup);
+
+let simConcepts = {};       // concept_name -> Mesh
+let simCausalLines = [];    // causal edge lines
+let clusterRings = [];      // cluster halo meshes
+let latentOrbMesh = null;
+let workingOrbMesh = null;
+let conceptLabelDivs = {};
+let queryProbeMesh = null;
+let queryProbeLines = [];
+let highlightedConcepts = [];
+let hoveredConcept = null;
+let lastAddedConcept = null; // for the pulse effect on new entries
+
+// Dynamic sphere radius based on how many nodes exist
+function getNodeRadius() {
+  const n = Object.keys(simConcepts).length + 1;
+  if (n <= 5)   return 12;
+  if (n <= 20)  return 9;
+  if (n <= 60)  return 7;
+  if (n <= 120) return 5;
+  return 4;
+}
+
+function resize(){
+    const w = container.clientWidth, h = container.clientHeight;
+    renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix();
+}
+window.onresize = resize; resize();
+
+/* ─ SIMULATION MECHANICS ─ */
+let telemetryHistory = { energy: [], coherence: [], entropy: [], surprise: [], labels: [] };
+let chartCanvas = document.getElementById('chart-canvas');
+let chartCtx = chartCanvas.getContext('2d');
+
+async function initSimulation() {
+  try {
+    const initRes = await fetch(`${API_BASE}/loom/api/cognition/init`, { method: 'POST' });
+    const initData = await initRes.json();
+    console.log("Substrate initialised:", initData);
+
+    clear3DSubstrate();
+    telemetryHistory = { energy: [], coherence: [], entropy: [], surprise: [], labels: [] };
+    drawTelemetryChart();
+
+    // Load current brain state (already in memory after /init)
+    const stateRes = await fetch(`${API_BASE}/loom/api/cognition/state`);
+    const stateData = await stateRes.json();
+    renderState(stateData);
+  } catch (e) {
+    console.error("Initialization failed. Please ensure the python server is running on port 8000.", e);
+  }
+}
+
+function clear3DSubstrate() {
+  while(simGroup.children.length > 0){
+    simGroup.remove(simGroup.children[0]);
+  }
+  simConcepts = {};
+  simCausalLines = [];
+  clusterRings = [];
+  latentOrbMesh = null;
+  workingOrbMesh = null;
+  queryProbeMesh = null;
+  queryProbeLines = [];
+  highlightedConcepts = [];
+  lastAddedConcept = null;
+  document.getElementById('labels-container').innerHTML = '';
+  conceptLabelDivs = {};
+}
+
+async function clearBrainMemory() {
+  if (!confirm("Are you sure you want to completely clear the brain's physical file?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/loom/api/cognition/reset`, { method: 'POST' });
+    const data = await res.json();
+    console.log("Substrate reset:", data);
+    clear3DSubstrate();
+    telemetryHistory = { energy: [], coherence: [], entropy: [], surprise: [], labels: [] };
+    drawTelemetryChart();
+    resetInspector();
+    alert("Brain memory successfully cleared!");
+    await initSimulation();
+  } catch(e) {
+    console.error("Reset failed:", e);
+  }
+}
+
+async function injectCustomThought() {
+  const textEl = document.getElementById('sim-text');
+  const goalEl = document.getElementById('sim-goal');
+  const commandEl = document.getElementById('sim-command');
+
+  const text = textEl.value.trim();
+  const intensity = parseFloat(document.getElementById('sim-intensity').value);
+  const goal = goalEl.value.trim();
+  const command = commandEl.value.trim();
+
+  if (!text) return;
+
+  // Track the first shard of this injection as the "new" concept for the pulse effect
+  const firstShard = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 5)[0] || text;
+  lastAddedConcept = firstShard;
+
+  // Clear inputs immediately
+  textEl.value = '';
+  goalEl.value = '';
+  commandEl.value = '';
+
+  await runSimulationTick({
+    text: text,
+    intensity: intensity,
+    goal: goal || null,
+    command: command || null
+  });
+
+  // Remove the "new" highlight after 4 seconds
+  setTimeout(() => { lastAddedConcept = null; }, 4000);
+}
+
+async function runMemoryStressTest() {
+  const btn = document.querySelector("button[onclick='runMemoryStressTest()']");
+  const originalText = btn.textContent;
+  btn.textContent = "🧪 Injecting 1000+ Shards...";
+  btn.disabled = true;
+  
+  try {
+    const res = await fetch(`${API_BASE}/loom/api/cognition/stress_test`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    console.log("Stress test initialised:", data);
+    
+    // Clear current substrate
+    clear3DSubstrate();
+    telemetryHistory = { energy: [], coherence: [], entropy: [], surprise: [], labels: [] };
+    drawTelemetryChart();
+    resetInspector();
+    clearQueryProbe();
+    
+    // Render the new state
+    renderState(data);
+    alert("Loaded 1,000+ concept shards into memory successfully!");
+  } catch(e) {
+    console.error("Stress test failed:", e);
+    alert("Stress test failed to load: " + e.message);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+function clearQueryProbe() {
+  if (queryProbeMesh) {
+    simGroup.remove(queryProbeMesh);
+    queryProbeMesh = null;
+  }
+  queryProbeLines.forEach(l => simGroup.remove(l));
+  queryProbeLines = [];
+  
+  highlightedConcepts.forEach(cName => {
+    const mesh = simConcepts[cName];
+    if (mesh) {
+      mesh.scale.set(1, 1, 1);
+      mesh.material.emissiveIntensity = 0.8;
+    }
+  });
+  highlightedConcepts = [];
+  
+  const textEl = document.getElementById('query-text');
+  if (textEl) textEl.value = '';
+}
+
+async function queryMemory() {
+  const textEl = document.getElementById('query-text');
+  const text = textEl.value.trim();
+  if (!text) return;
+  
+  // Clear any existing query probe
+  if (queryProbeMesh) {
+    simGroup.remove(queryProbeMesh);
+    queryProbeMesh = null;
+  }
+  queryProbeLines.forEach(l => simGroup.remove(l));
+  queryProbeLines = [];
+  highlightedConcepts.forEach(cName => {
+    const mesh = simConcepts[cName];
+    if (mesh) {
+      mesh.scale.set(1, 1, 1);
+      mesh.material.emissiveIntensity = 0.8;
+    }
+  });
+  highlightedConcepts = [];
+  
+  try {
+    const res = await fetch(`${API_BASE}/loom/api/cognition/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: text, top_k: 5 })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const d = await res.json();
+    console.log("Query retrieval results:", d);
+    
+    if (!d.success || d.matches.length === 0) {
+      alert("No matching memories found.");
+      return;
+    }
+    
+    // Create glowing magenta query probe at projected 3D coordinates
+    const mat = new THREE.MeshPhongMaterial({
+      color: 0xff00ff,
+      emissive: 0xff00ff,
+      emissiveIntensity: 1.5,
+      transparent: true,
+      opacity: 0.95
+    });
+    queryProbeMesh = new THREE.Mesh(new THREE.OctahedronGeometry(25, 0), mat);
+    queryProbeMesh.position.set(d.query_coords[0], d.query_coords[1], d.query_coords[2]);
+    simGroup.add(queryProbeMesh);
+    
+    // Draw lines and highlight targets
+    d.matches.forEach(match => {
+      const targetMesh = simConcepts[match.concept];
+      if (targetMesh) {
+        const path = [queryProbeMesh.position, targetMesh.position];
+        const geo = new THREE.BufferGeometry().setFromPoints(path);
+        const lineMat = new THREE.LineDashedMaterial({
+          color: 0xff00ff,
+          dashSize: 8,
+          gapSize: 4,
+          transparent: true,
+          opacity: 0.8
+        });
+        const line = new THREE.Line(geo, lineMat);
+        line.computeLineDistances();
+        simGroup.add(line);
+        queryProbeLines.push(line);
+        
+        // Highlight concept mesh
+        targetMesh.scale.set(1.5, 1.5, 1.5);
+        targetMesh.material.emissiveIntensity = 2.5;
+        highlightedConcepts.push(match.concept);
+      }
+    });
+    
+    // Render query retrieval results into the Inspector
+    let html = `
+      <div style="font-size:0.75rem; line-height:1.5;">
+        <div style="font-weight:700; color:#ff00ff; font-size:0.85rem; margin-bottom:8px; border-bottom:1px solid var(--bdr); padding-bottom:4px;">
+          🔍 Query Probe: "${d.query}"
+        </div>
+        <div style="margin-bottom:8px;">
+          <span class="pill" style="background:rgba(255,0,255,0.15); color:#ff00ff">3D COORD</span>
+          <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">[X: ${d.query_coords[0].toFixed(1)}, Y: ${d.query_coords[1].toFixed(1)}, Z: ${d.query_coords[2].toFixed(1)}]</span>
+        </div>
+        <div class="lbl" style="color:#ff00ff; margin-bottom:4px;">Retrieved Memories (Top Matches)</div>
+    `;
+    
+    d.matches.forEach((m, idx) => {
+      html += `
+        <div class="card" style="margin-bottom:6px; border-color: rgba(255,0,255,0.3); padding:8px; cursor:pointer;" onclick="inspectSimNode(\`${m.concept.replace(/'/g, "\\'")}\`)">
+          <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+            <span style="font-weight:700; color:var(--a2)">#${idx+1} Match</span>
+            <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#ff00ff">${(m.similarity * 100).toFixed(1)}% Match</span>
+          </div>
+          <div style="font-size:0.7rem; color:#f3f4f6;">${m.concept}</div>
+        </div>
+      `;
+    });
+    
+    html += `</div>`;
+    document.getElementById('neuron-inspector').innerHTML = html;
+    
+    // Focus camera onto the query probe coordinates
+    controls.target.copy(queryProbeMesh.position);
+    camera.position.set(d.query_coords[0], d.query_coords[1] + 300, d.query_coords[2] + 600);
+    controls.update();
+    
+  } catch (e) {
+    console.error("Query retrieval error:", e);
+    alert("Query failed: " + e.message);
+  }
+}
+
+async function runSimulationTick(payload) {
+  try {
+    const res = await fetch(`${API_BASE}/loom/api/cognition/tick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await res.json();
+    renderState(d);
+  } catch (e) {
+    console.error("Tick update error:", e);
+  }
+}
+
+function renderState(d) {
+  if (!d || !d.success) return;
+  const previousSelected = lastCognitionData ? lastCognitionData.selectedConcept : null;
+  lastCognitionData = d;
+  lastCognitionData.selectedConcept = previousSelected;
+  
+  // Update Telemetry indicators
+  document.getElementById('val-energy').textContent = d.metrics.energy.toFixed(2);
+  document.getElementById('val-coherence').textContent = d.metrics.coherence.toFixed(2);
+  document.getElementById('val-entropy').textContent = d.metrics.entropy.toFixed(2);
+  document.getElementById('val-surprise').textContent = d.metrics.surprise.toFixed(2);
+  
+  const modeBadge = document.getElementById('sim-cognitive-mode');
+  modeBadge.textContent = d.metrics.mode.toUpperCase();
+  
+  // Render cognitive explanation message
+  let desc = "System running in normal mode.";
+  if (d.metrics.mode === 'recovery') {
+    desc = "Energy depleted! Rehearsal consolidating active pathways.";
+    modeBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+    modeBadge.style.color = '#ef4444';
+  } else if (d.metrics.mode === 'exploration') {
+    desc = "High prediction surprise detected! Initiating chaotic search.";
+    modeBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+    modeBadge.style.color = '#3b82f6';
+  } else if (d.metrics.mode === 'abstraction') {
+    desc = "Coherent field reached. Restructuring concepts into abstractions.";
+    modeBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+    modeBadge.style.color = '#f59e0b';
+  } else {
+    modeBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+    modeBadge.style.color = '#10b981';
+  }
+  document.getElementById('sim-thought-desc').textContent = desc;
+  
+  // Update real-time canvas chart
+  updateTelemetryHistory(d.metrics, d.tick);
+  drawTelemetryChart();
+  
+  // Assemblies & Working memory lists
+  const attDiv = document.getElementById('sim-assemblies');
+  if (d.active_assemblies.length === 0) {
+    attDiv.innerHTML = "No active assemblies crystallized.";
+  } else {
+    attDiv.innerHTML = d.active_assemblies.map(a => {
+      return `<div style="background:rgba(255,255,255,0.02);padding:4px 8px;border-radius:6px;margin-bottom:4px;border:1px solid rgba(56,189,248,0.1)">
+        <span class="pill" style="background:rgba(56,189,248,0.15);color:var(--a2)">BASIN: ${a.basin_strength.toFixed(2)}</span>
+        <b>${a.dominant}</b> (${Object.keys(a.activations).length} concepts)
+      </div>`;
+    }).join('');
+  }
+  
+  const wmDiv = document.getElementById('sim-wm-status');
+  if (d.working_memory.nodes.length === 0) {
+    wmDiv.innerHTML = "Workspace empty.";
+  } else {
+    wmDiv.innerHTML = d.working_memory.nodes.map(n => {
+      return `<span class="tag">${n.id}: ${n.activation.toFixed(2)}</span>`;
+    }).join(' ');
+  }
+  
+  // Update planning & execution panels
+  updateAgentPanels(d.pipeline);
+  
+  // Render 3D environment representation
+  renderSubstrate3D(d);
+}
+
+function updateTelemetryHistory(m, tick) {
+  telemetryHistory.energy.push(m.energy);
+  telemetryHistory.coherence.push(m.coherence);
+  telemetryHistory.entropy.push(m.entropy);
+  telemetryHistory.surprise.push(m.surprise);
+  telemetryHistory.labels.push(`T${tick}`);
+  
+  if (telemetryHistory.energy.length > 20) {
+    telemetryHistory.energy.shift();
+    telemetryHistory.coherence.shift();
+    telemetryHistory.entropy.shift();
+    telemetryHistory.surprise.shift();
+    telemetryHistory.labels.shift();
+  }
+}
+
+function drawTelemetryChart() {
+  const w = chartCanvas.width;
+  const h = chartCanvas.height;
+  chartCtx.clearRect(0, 0, w, h);
+  
+  chartCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  chartCtx.lineWidth = 1;
+  for(let i = 1; i < 4; i++) {
+    chartCtx.beginPath();
+    chartCtx.moveTo(0, h * i / 4);
+    chartCtx.lineTo(w, h * i / 4);
+    chartCtx.stroke();
+  }
+  
+  const count = telemetryHistory.energy.length;
+  if (count < 2) return;
+  
+  const colors = {
+    energy: '#fb7185',
+    coherence: '#34d399',
+    entropy: '#22d3ee',
+    surprise: '#fbbf24'
+  };
+  
+  for (let key in colors) {
+    chartCtx.strokeStyle = colors[key];
+    chartCtx.lineWidth = 1.5;
+    chartCtx.beginPath();
+    
+    for(let i = 0; i < count; i++) {
+      const val = telemetryHistory[key][i];
+      const x = (i / (count - 1)) * w;
+      const y = h - (val * (h - 10)) - 5;
+      if (i === 0) chartCtx.moveTo(x, y);
+      else chartCtx.lineTo(x, y);
+    }
+    chartCtx.stroke();
+  }
+}
+
+function updateAgentPanels(pipeline) {
+  const plannerDiv = document.getElementById('agent-planner-tree');
+  const execDiv = document.getElementById('agent-execution-logs');
+  
+  if (pipeline.status === 'blocked') {
+    execDiv.innerHTML = `<span style="color:#ef4444">> EXECUTION BLOCKED: ${pipeline.reason}</span>`;
+    plannerDiv.innerHTML = `<span style="color:#6b7280">NO PLAN ACTIVE</span>`;
+    return;
+  }
+  
+  const d = pipeline.decision || {};
+  
+  if (d.planning && d.planning.plan) {
+    plannerDiv.innerHTML = `GOAL: ${d.planning.goal}<br>` + d.planning.plan.map((t, i) => `  [${i+1}] ➔ ${t}`).join('<br>');
+  } else {
+    plannerDiv.innerHTML = `NO ACTIVE PLAN<br>Provide Goal Constraint above...`;
+  }
+  
+  if (d.execution) {
+    execDiv.innerHTML = `> ACTION: ${d.execution.action}<br>> STATUS: ${d.execution.status}<br>> AUDIT: ${JSON.stringify(d.execution.execution_report)}`;
+  } else if (d.reasoning && d.reasoning.length > 0) {
+    execDiv.innerHTML = `> Neuro-Symbolic Resolution:<br>` + d.reasoning.map(r => `  * ${r}`).join('<br>');
+  } else {
+    execDiv.innerHTML = `SANDBOX ARMED & IDLE`;
+  }
+}
+
+/* ─ RENDER SUBSTRATE IN 3D ─ */
+function renderSubstrate3D(d) {
+  document.getElementById('labels-container').innerHTML = '';
+  conceptLabelDivs = {};
+
+  const currentConcepts = d.concepts_3d;
+  const shardGroups     = d.shard_groups     || {};
+  const conceptThoughts = d.concept_thoughts || {};
+
+  // Assign cluster colours (hue-shifted per cluster)
+  const clusterKeys   = Object.keys(shardGroups);
+  const clusterColors = {};
+  clusterKeys.forEach((k, i) => {
+    const hue = (i / Math.max(clusterKeys.length, 1)) * 360;
+    clusterColors[k] = new THREE.Color(`hsl(${hue},70%,55%)`);
+  });
+  // Build reverse map: concept -> cluster key
+  const conceptCluster = {};
+  for (const [k, members] of Object.entries(shardGroups)) {
+    members.forEach(c => conceptCluster[c] = k);
+  }
+
+  const r = getNodeRadius();
+
+  for (let concept in currentConcepts) {
+    const coords = currentConcepts[concept];
+    const posVec = new THREE.Vector3(coords[0], coords[1], coords[2]);
+    const clusterKey  = conceptCluster[concept];
+    const baseColor   = clusterKey ? clusterColors[clusterKey] : new THREE.Color(0x34d399);
+    const isAttention = d.attention_focus.includes(concept);
+    const isNew       = (concept === lastAddedConcept);
+
+    let mesh = simConcepts[concept];
+    if (!mesh) {
+      const mat = new THREE.MeshPhongMaterial({
+        color: isAttention ? 0xfbbf24 : baseColor,
+        emissive: isAttention ? 0xfbbf24 : baseColor,
+        emissiveIntensity: isNew ? 3.0 : 0.8,
+        transparent: true,
+        opacity: 0.92
+      });
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 18), mat);
+      mesh.position.copy(posVec);
+      mesh.userData.isNew = isNew;
+      mesh.userData.newPulseStart = isNew ? Date.now() : null;
+      mesh.userData.conceptThoughts = conceptThoughts[concept] || [];
+      simGroup.add(mesh);
+      simConcepts[concept] = mesh;
+    } else {
+      mesh.userData.targetPos = posVec;
+      mesh.userData.conceptThoughts = conceptThoughts[concept] || [];
+      // Update colour for attention
+      mesh.material.color.set(isAttention ? 0xfbbf24 : baseColor);
+      mesh.material.emissive.set(isAttention ? 0xfbbf24 : baseColor);
+      mesh.material.emissiveIntensity = isAttention ? 2.0 : (isNew ? 3.0 : 0.8);
+    }
+
+    // Overlay label (hidden by default, shown on click/hover)
+    const label = document.createElement('div');
+    label.className = 'node-label';
+    label.textContent = concept.length > 40 ? concept.substring(0, 38) + '…' : concept;
+    label.style.display = 'none';
+    if (lastCognitionData && lastCognitionData.selectedConcept === concept) {
+      label.classList.add('active-inspect');
+      label.style.display = 'block';
+    }
+    label.addEventListener('click', e => { e.stopPropagation(); inspectSimNode(concept); });
+    document.getElementById('labels-container').appendChild(label);
+    conceptLabelDivs[concept] = { label, pos: mesh.position };
+  }
+
+  // Prune vanished nodes
+  for (let c in simConcepts) {
+    if (!currentConcepts[c]) {
+      simGroup.remove(simConcepts[c]);
+      delete simConcepts[c];
+    }
+  }
+
+  // Refresh causal links
+  simCausalLines.forEach(l => simGroup.remove(l));
+  simCausalLines = [];
+  d.causal_links.forEach(link => {
+    const fromMesh = simConcepts[link.from];
+    const toMesh   = simConcepts[link.to];
+    if (fromMesh && toMesh) {
+      const geo = new THREE.BufferGeometry().setFromPoints([fromMesh.position, toMesh.position]);
+      const mat = new THREE.LineBasicMaterial({
+        color: 0x38bdf8, transparent: true,
+        opacity: 0.25 + (link.weight * 0.35)
+      });
+      const line = new THREE.Line(geo, mat);
+      simGroup.add(line);
+      simCausalLines.push(line);
+    }
+  });
+
+  // ── Cluster Halos ──────────────────────────────────────────────
+  clusterRings.forEach(m => simGroup.remove(m));
+  clusterRings = [];
+
+  for (const [clusterKey, members] of Object.entries(shardGroups)) {
+    if (members.length < 2) continue;
+    let cx = 0, cy = 0, cz = 0, cnt = 0;
+    let maxDist = 0;
+    members.forEach(c => {
+      const m = simConcepts[c];
+      if (!m) return;
+      cx += m.position.x; cy += m.position.y; cz += m.position.z; cnt++;
+    });
+    if (cnt === 0) continue;
+    cx /= cnt; cy /= cnt; cz /= cnt;
+    members.forEach(c => {
+      const m = simConcepts[c];
+      if (!m) return;
+      const d2 = m.position.distanceTo(new THREE.Vector3(cx, cy, cz));
+      if (d2 > maxDist) maxDist = d2;
+    });
+    const haloRadius = maxDist + r * 2.5;
+    const haloGeo = new THREE.SphereGeometry(haloRadius, 24, 24);
+    const col = clusterColors[clusterKey] || new THREE.Color(0x818cf8);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: col,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.07
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.set(cx, cy, cz);
+    halo.userData = { isClusterHalo: true, clusterKey };
+    simGroup.add(halo);
+    clusterRings.push(halo);
+
+    // Floating cluster label at the centroid top
+    const cLabel = document.createElement('div');
+    cLabel.className = 'cluster-label';
+    cLabel.textContent = clusterKey.replace('Cluster_', 'C-');
+    cLabel.style.position = 'absolute';
+    cLabel.style.color = `hsl(${(clusterKeys.indexOf(clusterKey) / Math.max(clusterKeys.length,1))*360},70%,70%)`;
+    cLabel.style.fontSize = '0.55rem';
+    cLabel.style.fontWeight = '700';
+    cLabel.style.letterSpacing = '2px';
+    cLabel.style.textTransform = 'uppercase';
+    cLabel.style.pointerEvents = 'none';
+    cLabel.style.textShadow = '0 0 8px currentColor';
+    cLabel.style.display = 'none';
+    cLabel.dataset.cx = cx; cLabel.dataset.cy = cy + haloRadius; cLabel.dataset.cz = cz;
+    document.getElementById('labels-container').appendChild(cLabel);
+    conceptLabelDivs[`__cluster__${clusterKey}`] = {
+      label: cLabel,
+      pos: new THREE.Vector3(cx, cy + haloRadius, cz),
+      isCluster: true
+    };
+  }
+
+  // Assembly hull rings (temporary)
+  d.active_assemblies.forEach((assy, idx) => {
+    const rootNode = simConcepts[assy.dominant];
+    if (rootNode) {
+      const size = (r * 3) + (assy.basin_strength * 15);
+      const hullGeo = new THREE.DodecahedronGeometry(size, 0);
+      const hullMat = new THREE.MeshBasicMaterial({
+        color: 0xa78bfa, wireframe: true, transparent: true,
+        opacity: 0.15 + (assy.confidence * 0.15)
+      });
+      const hullMesh = new THREE.Mesh(hullGeo, hullMat);
+      hullMesh.position.copy(rootNode.position);
+      hullMesh.userData = { isAssemblyHull: true, rotSpeed: 0.005 + (idx * 0.002) };
+      simGroup.add(hullMesh);
+      setTimeout(() => simGroup.remove(hullMesh), 3000);
+    }
+  });
+
+  // Meta shard crystals (temporary)
+  d.meta_shards.forEach(meta => {
+    let cx2 = 0, cy2 = 0, cz2 = 0, count2 = 0;
+    meta.children.forEach(c => {
+      if (simConcepts[c]) {
+        cx2 += simConcepts[c].position.x;
+        cy2 += simConcepts[c].position.y;
+        cz2 += simConcepts[c].position.z;
+        count2++;
+      }
+    });
+    if (count2 > 0) {
+      const pos = new THREE.Vector3(cx2/count2, (cy2/count2) + 120, cz2/count2);
+      const crystal = new THREE.Mesh(
+        new THREE.ConeGeometry(r * 1.5, r * 4, 4),
+        new THREE.MeshPhongMaterial({ color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 1.0, transparent: true, opacity: 0.9 })
+      );
+      crystal.position.copy(pos);
+      simGroup.add(crystal);
+      setTimeout(() => simGroup.remove(crystal), 3000);
+    }
+  });
+
+  // Orb placement
+  const hasConcepts = Object.keys(currentConcepts).length > 0;
+  if (hasConcepts) {
+    const lf = d.latent_field_3d;
+    const wl = d.working_latent_3d;
+    const lfVec = new THREE.Vector3(lf[0], lf[1], lf[2]);
+    const wlVec = new THREE.Vector3(wl[0], wl[1], wl[2]);
+    const orbR = Math.max(r * 1.5, 8);
+
+    if (!latentOrbMesh) {
+      latentOrbMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(orbR, 24, 24),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45 })
+      );
+      latentOrbMesh.position.copy(lfVec);
+      simGroup.add(latentOrbMesh);
+    } else { latentOrbMesh.userData.targetPos = lfVec; }
+
+    if (!workingOrbMesh) {
+      workingOrbMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(orbR * 0.65, 24, 24),
+        new THREE.MeshBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.4 })
+      );
+      workingOrbMesh.position.copy(wlVec);
+      simGroup.add(workingOrbMesh);
+    } else { workingOrbMesh.userData.targetPos = wlVec; }
+  } else {
+    if (latentOrbMesh)  { simGroup.remove(latentOrbMesh);  latentOrbMesh = null; }
+    if (workingOrbMesh) { simGroup.remove(workingOrbMesh); workingOrbMesh = null; }
+  }
+
+  document.getElementById('hv').textContent = Object.keys(simConcepts).length;
+  document.getElementById('he').textContent = d.causal_links.length;
+  document.getElementById('hf').textContent = d.metrics.mode.toUpperCase();
+}
+
+function updateHUDLabels() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+
+  for (let key in conceptLabelDivs) {
+    const item = conceptLabelDivs[key];
+
+    // Cluster labels: always shown but dim unless hovering
+    if (item.isCluster) {
+      const pos = item.pos.clone();
+      pos.project(camera);
+      if (pos.z > 1) { item.label.style.display = 'none'; continue; }
+      const x = (pos.x * 0.5 + 0.5) * w;
+      const y = (pos.y * -0.5 + 0.5) * h;
+      item.label.style.display = 'block';
+      item.label.style.left = `${x}px`;
+      item.label.style.top  = `${y}px`;
+      continue;
+    }
+
+    const isSelected   = lastCognitionData && lastCognitionData.selectedConcept === key;
+    const isHovered    = hoveredConcept === key;
+    const isHighlighted = highlightedConcepts.includes(key);
+
+    if (!(isSelected || isHovered || isHighlighted)) {
+      item.label.style.display = 'none';
+      continue;
+    }
+
+    const pos = item.pos.clone();
+    pos.project(camera);
+    if (pos.z > 1) { item.label.style.display = 'none'; continue; }
+
+    const x = (pos.x * 0.5 + 0.5) * w;
+    const y = (pos.y * -0.5 + 0.5) * h;
+    item.label.style.display = 'block';
+    item.label.style.left = `${x}px`;
+    item.label.style.top  = `${y - 12}px`;
+  }
+}
+
+/* ─ ANIMATION LOOP ─ */
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+
+    const now = Date.now();
+
+    // Smooth position transitions (lerp)
+    for (let concept in simConcepts) {
+      const mesh = simConcepts[concept];
+      if (mesh.userData.targetPos) {
+        mesh.position.lerp(mesh.userData.targetPos, 0.08);
+      }
+      // New-concept pulse: scale bounce + glow decay over 4s
+      if (mesh.userData.newPulseStart) {
+        const age = now - mesh.userData.newPulseStart;
+        if (age < 4000) {
+          const t = age / 4000;
+          const pulse = 1.0 + (1 - t) * 0.6 * Math.sin(now * 0.015);
+          mesh.scale.set(pulse, pulse, pulse);
+          mesh.material.emissiveIntensity = 3.0 * (1 - t) + 0.8 * t;
+        } else {
+          mesh.scale.set(1, 1, 1);
+          mesh.material.emissiveIntensity = 0.8;
+          mesh.userData.newPulseStart = null;
+        }
+      }
+    }
+
+    if (latentOrbMesh && latentOrbMesh.userData.targetPos) {
+      latentOrbMesh.position.lerp(latentOrbMesh.userData.targetPos, 0.05);
+      bloomPoint.position.copy(latentOrbMesh.position);
+      const scale = 1.0 + Math.sin(now * 0.003) * 0.1;
+      latentOrbMesh.scale.set(scale, scale, scale);
+    }
+
+    if (workingOrbMesh && workingOrbMesh.userData.targetPos) {
+      workingOrbMesh.position.lerp(workingOrbMesh.userData.targetPos, 0.05);
+      const scale = 1.0 + Math.cos(now * 0.002) * 0.08;
+      workingOrbMesh.scale.set(scale, scale, scale);
+    }
+
+    simGroup.children.forEach(mesh => {
+      if (mesh.userData.isAssemblyHull) {
+        mesh.rotation.y += mesh.userData.rotSpeed;
+        mesh.rotation.x += mesh.userData.rotSpeed * 0.5;
+      }
+      // Slowly rotate cluster halos
+      if (mesh.userData.isClusterHalo) {
+        mesh.rotation.y += 0.0008;
+        mesh.rotation.x += 0.0003;
+      }
+    });
+
+    
+    if (queryProbeMesh) {
+      queryProbeMesh.rotation.y += 0.02;
+      queryProbeMesh.rotation.x += 0.01;
+      const scale = 1.0 + Math.sin(now * 0.005) * 0.15;
+      queryProbeMesh.scale.set(scale, scale, scale);
+    }
+    
+    updateHUDLabels();
+    renderer.render(scene, camera);
+}
+
+/* ─ INSPECTION RAYCASTERS & HUD EVENT LISTENERS ─ */
+let lastCognitionData = null;
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// Create hover tip tooltip dynamically
+let tip = document.getElementById('inspect-tooltip');
+if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'inspect-tooltip';
+    tip.style.position = 'absolute';
+    tip.style.display = 'none';
+    tip.style.pointerEvents = 'none';
+    tip.style.background = 'rgba(8,12,20,0.95)';
+    tip.style.backdropFilter = 'blur(12px)';
+    tip.style.border = '1px solid rgba(56,189,248,0.4)';
+    tip.style.borderRadius = '10px';
+    tip.style.padding = '12px';
+    tip.style.fontSize = '0.7rem';
+    tip.style.maxWidth = '250px';
+    tip.style.zIndex = '1000';
+    tip.style.boxShadow = '0 8px 30px rgba(0,0,0,0.6)';
+    tip.style.color = '#fff';
+    document.body.appendChild(tip);
+}
+
+// Click listener to select nodes and extract information
+container.addEventListener('click', (e) => {
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(Object.values(simConcepts));
+    
+    if (intersects.length > 0) {
+        const clickedMesh = intersects[0].object;
+        const conceptName = Object.keys(simConcepts).find(key => simConcepts[key] === clickedMesh);
+        if (conceptName) {
+            inspectSimNode(conceptName);
+        }
+    } else {
+        resetInspector();
+    }
+});
+
+function resetInspector() {
+    if (lastCognitionData) {
+        lastCognitionData.selectedConcept = null;
+    }
+    document.querySelectorAll('.node-label').forEach(lbl => {
+        lbl.classList.remove('active-inspect');
+        lbl.style.display = 'none';
+    });
+    document.getElementById('neuron-inspector').innerHTML = `
+        <p style="color:var(--muted); font-size:0.75rem; text-align:center;">Click a concept node in 3D to decode its cognitive properties.</p>
+    `;
+}
+
+// Hover mousemove listener
+container.addEventListener('mousemove', (e) => {
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / container.clientWidth) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(Object.values(simConcepts));
+    
+    if (intersects.length > 0) {
+        const clickedMesh = intersects[0].object;
+        const conceptName = Object.keys(simConcepts).find(key => simConcepts[key] === clickedMesh);
+        
+        hoveredConcept = conceptName;
+        container.style.cursor = 'pointer';
+        tip.style.display = 'block';
+        tip.style.left = (e.clientX + 20) + 'px';
+        tip.style.top = (e.clientY + 10) + 'px';
+        tip.innerHTML = `<b style="color:var(--a2);text-transform:uppercase;font-size:0.6rem;letter-spacing:1px">Concept Shard</b><div style="margin-top:6px;line-height:1.5">${conceptName}</div>`;
+    } else {
+        hoveredConcept = null;
+        container.style.cursor = 'crosshair';
+        tip.style.display = 'none';
+    }
+});
+
+function inspectSimNode(conceptName) {
+    if (!lastCognitionData) return;
+
+    lastCognitionData.selectedConcept = conceptName;
+
+    document.querySelectorAll('.node-label').forEach(lbl => {
+        lbl.classList.remove('active-inspect');
+        lbl.style.display = 'none';
+    });
+    if (conceptLabelDivs[conceptName] && conceptLabelDivs[conceptName].label) {
+        conceptLabelDivs[conceptName].label.classList.add('active-inspect');
+        conceptLabelDivs[conceptName].label.style.display = 'block';
+    }
+
+    const coords  = lastCognitionData.concepts_3d[conceptName] || [0,0,0];
+    const wmNode  = lastCognitionData.working_memory.nodes.find(n => n.id === conceptName);
+    const wmActivation = wmNode ? wmNode.activation : 0.0;
+    const assembly    = lastCognitionData.active_assemblies.find(a => a.dominant === conceptName);
+    const parentMeta  = lastCognitionData.meta_shards.find(ms => ms.children.includes(conceptName));
+    const causes  = lastCognitionData.causal_links.filter(l => l.to   === conceptName);
+    const effects = lastCognitionData.causal_links.filter(l => l.from === conceptName);
+
+    // Get thoughts from mesh userData (populated during renderSubstrate3D)
+    const mesh = simConcepts[conceptName];
+    const thoughts = (mesh && mesh.userData.conceptThoughts) || [];
+
+    // Find which cluster this concept belongs to
+    const shardGroups = lastCognitionData.shard_groups || {};
+    let clusterName = null;
+    for (const [k, members] of Object.entries(shardGroups)) {
+        if (members.includes(conceptName)) { clusterName = k; break; }
+    }
+
+    let html = `
+        <div style="font-size:0.75rem; line-height:1.5;">
+            <div style="font-weight:700; color:var(--a2); font-size:0.85rem; margin-bottom:8px; border-bottom:1px solid var(--bdr); padding-bottom:4px;">
+                🔍 ${conceptName.length > 50 ? conceptName.substring(0, 48) + '…' : conceptName}
+            </div>
+    `;
+
+    if (clusterName) {
+        html += `
+            <div style="margin-bottom:6px;">
+                <span class="pill" style="background:rgba(129,140,248,0.15); color:var(--a)">CLUSTER</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db; margin-left:4px;">${clusterName}</span>
+            </div>
+        `;
+    }
+
+    html += `
+            <div style="margin-bottom:6px;">
+                <span class="pill" style="background:rgba(56,189,248,0.15); color:var(--a2)">3D COORD</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">[${coords[0].toFixed(1)}, ${coords[1].toFixed(1)}, ${coords[2].toFixed(1)}]</span>
+            </div>
+
+            <div style="margin-bottom:6px;">
+                <span class="pill" style="background:rgba(16,185,129,0.15); color:#10b981;">WM</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">Activation: ${wmActivation.toFixed(3)}</span>
+            </div>
+    `;
+
+    // Thought decomposition (main value: shows what's inside the sphere)
+    if (thoughts.length > 0) {
+        html += `
+            <div style="margin-bottom:8px; border:1px solid rgba(56,189,248,0.2); background:rgba(56,189,248,0.04); padding:8px; border-radius:8px;">
+                <div class="lbl" style="color:var(--a2); margin-bottom:6px;">💭 Thought Decomposition (${thoughts.length})</div>
+                ${thoughts.map((t, i) => `<div style="font-size:0.65rem; color:#9ca3af; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--a);">${i+1}.</span> ${t}</div>`).join('')}
+            </div>
+        `;
+    }
+
+    if (assembly) {
+        html += `
+            <div style="margin-bottom:6px; border:1px solid rgba(167,139,250,0.3); background:rgba(167,139,250,0.05); padding:6px; border-radius:6px;">
+                <span class="pill" style="background:#a78bfa; color:#000;">ATTRACTOR</span>
+                <div style="margin-top:4px; font-size:0.65rem;">strength: <b>${assembly.basin_strength.toFixed(3)}</b> · stability: <b>${assembly.stability.toFixed(3)}</b></div>
+            </div>
+        `;
+    }
+
+    if (causes.length > 0) {
+        html += `<div style="margin-top:6px;"><div class="lbl">Triggered by</div>${causes.map(c => `<div style="font-size:0.65rem; color:#9ca3af;">← <b>${c.from.substring(0,40)}</b> (w:${c.weight.toFixed(2)})</div>`).join('')}</div>`;
+    }
+    if (effects.length > 0) {
+        html += `<div style="margin-top:6px;"><div class="lbl">Leads to</div>${effects.map(e => `<div style="font-size:0.65rem; color:#9ca3af;">→ <b>${e.to.substring(0,40)}</b> (w:${e.weight.toFixed(2)})</div>`).join('')}</div>`;
+    }
+
+    html += `</div>`;
+    document.getElementById('neuron-inspector').innerHTML = html;
+}
+
+// Fire Simulation Initialization
+document.getElementById('LD').style.display='none';
+initSimulation();
+animate();
+</script>
+</body>
+</html>

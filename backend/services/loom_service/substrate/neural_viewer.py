@@ -1,16 +1,17 @@
 import msgpack
 import os
-from backend.services.loom_service.substrate.visualizer import LoomVisualizer
-from backend.services.loom_service.substrate.navigator import LoomNavigator
+import numpy as np
+from collections import deque
 from backend.config.envConfig import setup_logger, log_service
 
-logger = setup_logger("LoomViewer")
+logger = setup_logger("NeuralViewer")
 
-class LoomViewer:
+class NeuralViewer:
     def __init__(self, loom_path=None):
         self.data = None
         self.loom_path = loom_path
         self.shard_cache = {} # Step 4: Activation Cache
+        self.adj = {}
         if loom_path:
             self.load(loom_path)
 
@@ -36,6 +37,7 @@ class LoomViewer:
                     "g": raw_data.get("g", {"n": {}, "e": []}),
                     "type": "shard"
                 }
+        self._build_adjacency()
 
     def _discover_and_load_shards(self, master_path):
         """
@@ -50,12 +52,15 @@ class LoomViewer:
         Retrieves a node, loading its shard if necessary.
         """
         # 1. Check structural nodes (already in master)
-        if node_id in self.data["g"]["n"]:
+        if self.data and "g" in self.data and "n" in self.data["g"] and node_id in self.data["g"]["n"]:
             return self.data["g"]["n"][node_id]
         
         # 2. Check which shard contains this node
-        shard_map = self.data.get("map", {})
+        shard_map = self.data.get("map", {}) if self.data else {}
         if node_id not in shard_map:
+            # Check delegate node resolver for backward compatibility
+            if hasattr(self, 'node_resolver') and self.node_resolver:
+                return self.node_resolver(node_id)
             return None
             
         shard_id = shard_map[node_id]
@@ -86,10 +91,106 @@ class LoomViewer:
                 
                 self.shard_cache[shard_id] = shard_nodes
                 # Merge edges into master graph for traversal (Edges are small)
-                self.data["g"]["e"].extend(shard_edges)
+                if self.data and "g" in self.data and "e" in self.data["g"]:
+                    self.data["g"]["e"].extend(shard_edges)
+                self._build_adjacency()
                 log_service(logger, f"Lazy-loaded Neuron Shard {shard_id} ({len(shard_nodes)} nodes)", "debug")
         else:
             log_service(logger, f"Shard {shard_id} missing at {s_path}", "warning")
+
+    # -------------------------------------------------------------------------
+    # NEURAL ADJACENCY & SEARCH METHODS
+    # -------------------------------------------------------------------------
+
+    def _build_adjacency(self):
+        """Builds local adjacency mapping for fast BFS/Beam search traversal."""
+        if not self.data:
+            return
+        self.adj = {}
+        for e in self.data.get("g", {}).get("e", []):
+            f, t = e["f"], e["t"]
+            if f not in self.adj: self.adj[f] = []
+            self.adj[f].append(e)
+
+    def bfs_traversal(self, start_node_id, max_depth=3):
+        """Breadth-First Search for broad knowledge coverage."""
+        log_service(logger, f"Starting BFS Traversal from {start_node_id}...", "debug")
+        visited = set()
+        queue = deque([(start_node_id, 0)]) # (node_id, depth)
+        results = []
+        
+        while queue:
+            node_id, depth = queue.popleft()
+            if depth > max_depth or node_id in visited:
+                continue
+            
+            visited.add(node_id)
+            node = self.get_node(node_id)
+            if node:
+                results.append({"id": node_id, "node": node, "depth": depth})
+
+            for edge in self.adj.get(node_id, []):
+                queue.append((edge["t"], depth + 1))
+        
+        return results
+
+    def beam_search(self, start_node_id, beam_width=3, max_depth=5):
+        """
+        Optimized Beam Search for focused reasoning.
+        Uses truth_score and semantic weight as heuristics.
+        """
+        log_service(logger, f"Starting Beam Search reasoning (width={beam_width})...", "debug")
+        current_beam = [(start_node_id, 0, 1.0)] # (id, depth, accumulated_score)
+        all_visited_paths = [(start_node_id, 0, 1.0)]
+
+        for depth in range(max_depth):
+            next_candidates = []
+            for node_id, d, score in current_beam:
+                if node_id not in self.adj: continue
+                
+                for edge in self.adj[node_id]:
+                    target_id = edge["t"]
+                    target_node = self.get_node(target_id) or {}
+                    
+                    # Heuristic: TruthScore + Structural Weight
+                    h_score = target_node.get("m", {}).get("truth_score", 0.5)
+                    if edge["r"] == "relates_to": h_score *= 0.8
+                    
+                    new_score = score * h_score
+                    next_candidates.append((target_id, depth + 1, new_score))
+
+            if not next_candidates:
+                break
+            
+            next_candidates.sort(key=lambda x: x[2], reverse=True)
+            current_beam = next_candidates[:beam_width]
+            all_visited_paths.extend(current_beam)
+
+        return all_visited_paths
+
+    def concept_jump(self, concept_hash):
+        """Direct jump to a specific concept in the bridge."""
+        if not self.data:
+            return []
+        nodes = self.data.get("bridge", {}).get(concept_hash, [])
+        return [{"id": n["n"], "score": n["s"]} if isinstance(n, dict) else {"id": n, "score": 1.0} for n in nodes]
+
+    def heuristic_jump(self, query_embedding, level_centroids):
+        """Jump to the most relevant hub center (Constellation or Atlas)."""
+        best_id = None
+        max_sim = -1
+        
+        for hub_id, centroid in level_centroids.items():
+            sim = np.dot(query_embedding, centroid) / (np.linalg.norm(query_embedding) * np.linalg.norm(centroid))
+            if sim > max_sim:
+                max_sim = sim
+                best_id = hub_id
+        
+        return best_id, max_sim
+
+    # -------------------------------------------------------------------------
+    # EXPLORER / AUDITING
+    # -------------------------------------------------------------------------
 
     def explore(self):
         """Launches the dynamic Loom Explorer server."""
@@ -97,12 +198,11 @@ class LoomViewer:
         launch()
 
     def audit(self):
-        """Prints structure and generates HTML visualization."""
+        """Prints structure and displays audit diagnostics."""
         if not self.data:
             print("No data loaded.")
             return
 
-        # 1. Output Informational Message
         if self.loom_path and self.data.get("type") == "atlas_master":
             print(f"\n[*] COGNITIVE ATLAS ARCHITECTURE READY")
             print(f"[*] To activate the neural graph, run: .venv\\Scripts\\python.exe -m backend.services.loom_service.server")
@@ -155,7 +255,6 @@ class LoomViewer:
         print(" [COGNITIVE] NEURAL ACTIVATION DEMONSTRATION ")
         print("*"*50)
         
-        navigator = LoomNavigator(self.data)
         shard_ids = [nid for nid, n in self.data["g"]["n"].items() if n["t"] == "shard"]
         if not shard_ids: 
             print("[SKIP] No shards found for activation test.")
@@ -163,7 +262,7 @@ class LoomViewer:
 
         start_id = shard_ids[0]
         print(f"[*] Activating Graph from Neuron: {start_id}")
-        reasoning_path = navigator.beam_search(start_id, beam_width=2, max_depth=3)
+        reasoning_path = self.beam_search(start_id, beam_width=2, max_depth=3)
         
         for nid, depth, score in reasoning_path:
             node = self.data["g"]["n"].get(nid, {})
@@ -194,8 +293,30 @@ class LoomViewer:
                 if e["r"] in ["contains", "primary_ingestion"]:
                     self._print_tree(e["t"], nodes, adj, level + 1, visited)
 
+
+class LoomNavigator:
+    """Backward-compatible wrapper routing requests to internal NeuralViewer implementation."""
+    def __init__(self, loom_data, node_resolver=None):
+        self.viewer = NeuralViewer()
+        self.viewer.data = loom_data
+        self.viewer.node_resolver = node_resolver
+        self.viewer._build_adjacency()
+
+    def bfs_traversal(self, start_node_id, max_depth=3):
+        return self.viewer.bfs_traversal(start_node_id, max_depth)
+
+    def beam_search(self, start_node_id, beam_width=3, max_depth=5):
+        return self.viewer.beam_search(start_node_id, beam_width, max_depth)
+
+    def concept_jump(self, concept_hash):
+        return self.viewer.concept_jump(concept_hash)
+
+    def heuristic_jump(self, query_embedding, level_centroids):
+        return self.viewer.heuristic_jump(query_embedding, level_centroids)
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
-        viewer = LoomViewer(sys.argv[1])
+        viewer = NeuralViewer(sys.argv[1])
         viewer.audit()

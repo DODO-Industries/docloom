@@ -51,8 +51,8 @@ def run_test_on_pdf(target_pdf, results_path, run_timestamp):
     
     # 4. Binary Serialization (.loom File Creation)
     print("Generating Intelligence-Ready .loom Binary Graph...")
-    from backend.services.loom_service.weaver import LoomWeaver
-    from backend.services.loom_service.viewer import LoomViewer
+    from backend.test.legacy_loom.weaver import LoomWeaver
+    from backend.test.legacy_loom.viewer import LoomViewer
     
     base_name = os.path.splitext(os.path.basename(target_pdf))[0]
     output_folder = os.path.join(results_path, f"{base_name}_{run_timestamp}")
@@ -61,6 +61,9 @@ def run_test_on_pdf(target_pdf, results_path, run_timestamp):
     loom_path = os.path.join(output_folder, f"{base_name}.loom")
     weaver = LoomWeaver()
     weaver.weave(all_pages, loom_path)
+    
+    # The weaver creates an atlas_{base} entry point for sharded architecture
+    actual_atlas_path = os.path.join(output_folder, f"atlas_{base_name}.loom")
     
     duration = time.time() - start_time
     
@@ -91,7 +94,8 @@ def run_test_on_pdf(target_pdf, results_path, run_timestamp):
         json.dump(hierarchical_pages, f, indent=4, ensure_ascii=False)
  
     # 6. Semantic Integrity Audit
-    viewer = LoomViewer(loom_path)
+    from backend.test.legacy_loom.viewer import LoomViewer
+    viewer = LoomViewer(actual_atlas_path)
     viewer.audit()
     
     print(f"SUCCESS: {base_name} complete in {duration:.2f} seconds! ({duration/total_pages:.2f}s per page)")

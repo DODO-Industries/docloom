@@ -2,7 +2,7 @@ import numpy as np
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from .attractor_dynamics import CognitiveAssembly, SemanticFieldEngine, MetaShards, AssemblyCompilation
+from .attractor_dynamics import CognitiveAssembly, SemanticFieldEngine, MetaShards, AssemblyCompilation, safe_normalize
 from .cognitive_workspace import AttentionDynamics, WorkingMemory
 from .predictive_world_model import PredictiveProcessingEngine, CausalGraphs
 from .metacognition import Reflection
@@ -115,6 +115,14 @@ class GlobalCognitiveState:
     working_latent: Optional[np.ndarray] = None
     episodic_tensors: List[np.ndarray] = field(default_factory=list)
     
+    # Evolving Coordinate & Physics Tensor Systems
+    concept_coords: Dict[str, np.ndarray] = field(default_factory=dict)
+    concept_velocities: Dict[str, np.ndarray] = field(default_factory=dict)
+    physics_tensors: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    
+    # Explicit Temporal Memory Layer Separation
+    sensory_memory: List[str] = field(default_factory=list)
+    
     temporal_history: List[Dict[str, float]] = field(default_factory=list)
     active_assemblies: List[CognitiveAssembly] = field(default_factory=list)
     attention_focus: List[str] = field(default_factory=list)
@@ -126,7 +134,10 @@ class GlobalCognitiveState:
     energy_budget: float = 1.0
     
     def process_tick(self, resonance_input: Dict[str, float]) -> Optional[CognitiveAssembly]:
-        # ISSUE 10: Process memory decay at start of tick
+        # Sensory Memory Layer: Buffer incoming inputs
+        self.sensory_memory = list(resonance_input.keys())
+        
+        # Process memory decay in Working Memory Layer
         self.memory.tick()
         
         # 1. Convert sparse input into Continuous Vector Field
@@ -135,11 +146,29 @@ class GlobalCognitiveState:
         for text in resonance_input:
             self.semantic_field.register_concept(text)
             
+        # Synchronize dynamic concept physics states on concept registration
+        for concept in self.semantic_field.concept_embeddings:
+            if concept not in self.concept_coords:
+                emb = self.semantic_field.concept_embeddings[concept]
+                self.concept_coords[concept] = emb.copy()
+                self.concept_velocities[concept] = np.zeros_like(emb)
+                self.physics_tensors[concept] = {
+                    "energy": 1.0,
+                    "entropy": 0.0,
+                    "stability": 1.0,
+                    "activation": 0.9,
+                    "resonance": 0.0,
+                    "momentum": 0.0,
+                    "decay": 0.05,
+                    "attention": 0.0
+                }
+            
         field_dim = len(next(iter(self.semantic_field.concept_embeddings.values()))) if self.semantic_field.concept_embeddings else 128
         input_tensor = np.zeros(field_dim)
         
         for text, intensity in resonance_input.items():
-            vec = self.semantic_field.concept_embeddings[text]
+            # Use dynamic evolving coordinates instead of static embeddings for field driving
+            vec = self.concept_coords[text]
             active_vecs.append(vec)
             input_tensor += vec * intensity
             
@@ -165,7 +194,6 @@ class GlobalCognitiveState:
         inhibition_tensor = self.working_latent * 0.15
         
         # Second-order physics: Mass-Spring-Damper system with semantic driving force
-        # Velocity = (Momentum) + (Input Driving Force) + (Sync Force) - (Inhibition)
         self.latent_velocity = (0.8 * self.latent_velocity) + (input_tensor * 0.4) + (synchronization_force * 0.2) - inhibition_tensor
         
         # Field Position Update
@@ -179,40 +207,99 @@ class GlobalCognitiveState:
         wnorm = np.linalg.norm(self.working_latent)
         if wnorm > 0: self.working_latent /= wnorm
         
-        # 3. Continuous Field Metrics
-        self.coherence = CognitiveMetrics.compute_coherence(active_vecs)
-        self.entropy = CognitiveMetrics.compute_entropy(self.latent_field, prev_latent) # Turbulence
+        # 3. Continuous Field Physics Step: drift, attract, and evolve individual concept coordinates
+        dt = 0.1
+        if self.latent_field is not None and self.concept_coords:
+            for c, pos in self.concept_coords.items():
+                vel = self.concept_velocities.get(c, np.zeros_like(pos))
+                tensors = self.physics_tensors.setdefault(c, {
+                    "energy": 1.0, "entropy": 0.0, "stability": 1.0, "activation": 0.9,
+                    "resonance": 0.0, "momentum": 0.0, "decay": 0.05, "attention": 0.0
+                })
+                
+                # Attraction to consciousness focus (latent field)
+                attention_boost = 1.8 if c in self.attention_focus else 1.0
+                activation = tensors.get("activation", 0.5)
+                f_latent = (self.latent_field - pos) * (0.25 * activation * attention_boost)
+                
+                # Causal spring attraction to connected neighbors
+                f_causal = np.zeros_like(pos)
+                if self.causal.causal_matrix.has_node(c):
+                    edges = self.causal.causal_matrix.edges(c, data=True)
+                    for _, target, data in edges:
+                        weight = data.get("weight", 0.5)
+                        if target in self.concept_coords:
+                            f_causal += (self.concept_coords[target] - pos) * (weight * 0.15)
+                
+                # Semantic repulsion to prevent clumping
+                f_repulsion = np.zeros_like(pos)
+                for other, other_pos in self.concept_coords.items():
+                    if other == c: continue
+                    diff = pos - other_pos
+                    dist = np.linalg.norm(diff)
+                    if dist < 0.2:
+                        f_repulsion += (diff / (dist + 1e-5)) * 0.02
+                        
+                f_total = f_latent + f_causal + f_repulsion
+                
+                # Momentum & Velocity Update
+                vel = vel * 0.7 + f_total * dt
+                self.concept_velocities[c] = vel
+                
+                # Update position & project on unit hypersphere
+                self.concept_coords[c] = safe_normalize(pos + vel * dt)
+                
+                # Update physics state tensors for the node
+                res = float(np.dot(self.concept_coords[c], self.latent_field))
+                tensors["resonance"] = float(np.clip(res, 0.0, 1.0))
+                
+                decay_rate = tensors.get("decay", 0.05)
+                input_intensity = resonance_input.get(c, 0.0)
+                if input_intensity > 0:
+                    tensors["activation"] = min(1.0, tensors["activation"] + input_intensity * 0.3)
+                    tensors["energy"] = min(1.0, tensors["energy"] + 0.2)
+                else:
+                    tensors["activation"] = max(0.0, tensors["activation"] - decay_rate)
+                    tensors["energy"] = max(0.0, tensors["energy"] - 0.02)
+                    
+                tensors["entropy"] = float(np.clip(np.linalg.norm(vel), 0.0, 1.0))
+                if tensors["activation"] > 0.4:
+                    tensors["stability"] = min(1.0, tensors["stability"] + 0.02)
+                else:
+                    tensors["stability"] = max(0.01, tensors["stability"] - 0.005)
+                tensors["attention"] = 1.0 if c in self.attention_focus else 0.0
         
-        # 4. Thermodynamic Energy & Latent Prediction
+        # 4. Continuous Field Metrics
+        self.coherence = CognitiveMetrics.compute_coherence(active_vecs)
+        self.entropy = CognitiveMetrics.compute_entropy(self.latent_field, prev_latent)
+        
+        # 5. Thermodynamic Energy & Latent Prediction
         coherence_gain = max(0.0, self.coherence - getattr(self, '_last_coherence', self.coherence))
         self._last_coherence = self.coherence
         
-        # Latent expectation vs reality
         predicted_latent = self.predictor.generate_continuous_prediction(prev_latent)
         prediction_error = np.linalg.norm(self.latent_field - predicted_latent) if predicted_latent is not None else 0.5
         self.surprise = float(np.clip(prediction_error, 0.0, 1.0))
         
-        # Train continuous sequence model
         self.predictor.update_model_continuous(prev_latent, self.latent_field)
         
-        # Maintain legacy predicted map for causal logic bridging
         previous_nodes = list(self.active_field.keys())
         predicted_map = self.predictor.generate_prediction(previous_nodes)
         self.predictor.update_model(previous_nodes, list(resonance_input.keys()))
         
-        cognitive_load = self.entropy * 0.2
-        novelty_cost = self.surprise * 0.1
-        recovery = coherence_gain * 0.3
-        drain = cognitive_load + novelty_cost + (self.pressure * 0.05)
+        cognitive_load = self.entropy * 0.02
+        novelty_cost = self.surprise * 0.015
+        recovery = coherence_gain * 0.15 + (self.coherence * 0.01)
+        drain = cognitive_load + novelty_cost + (self.pressure * 0.005)
         
         self.energy_budget += (recovery - drain)
         self.energy_budget = float(np.clip(self.energy_budget, 0.0, 1.0))
         
-        # 5. Extract Symbolic Projection for Legacy Components
+        # 6. Extract Symbolic Projection for Legacy Components
         projected_activations = {}
-        for text, vec in self.semantic_field.concept_embeddings.items():
+        for text, vec in self.concept_coords.items():
             sim = np.dot(self.latent_field, vec)
-            if sim > 0.4: # Extraction threshold
+            if sim > 0.4:
                 projected_activations[text] = float(sim)
                 
         self.active_field = projected_activations
@@ -227,7 +314,7 @@ class GlobalCognitiveState:
         self.pressure = refl_report["reflection_pressure"]
         self.attention.adjust_parameters(self.pressure)
         
-        # 6. Attractor Crystallization from Field
+        # 7. Attractor Crystallization from Field
         ca = self.compiler.compile_assembly(
             latent_field=self.latent_field,
             projected_activations=projected_activations,
@@ -240,25 +327,65 @@ class GlobalCognitiveState:
         if ca:
             self.active_assemblies.append(ca)
             self.memory.insert_assembly(ca)
-            self.episodic_tensors.append(self.latent_field.copy()) # Episodic snapshot
+            self.episodic_tensors.append(self.latent_field.copy()) # Episodic Memory Layer
             if len(self.episodic_tensors) > 1000:
                 self.episodic_tensors.pop(0)
             
             if len(self.active_assemblies) > 1:
                 prev = self.active_assemblies[-2].dominant_concept
                 if prev != ca.dominant_concept:
-                    # True causal trajectory in embedding space
                     self.causal.record_transition(prev, ca.dominant_concept)
                     
             if len(self.active_assemblies) >= 3:
                 recent_ids = [a.dominant_concept for a in self.active_assemblies[-3:]]
-                recent_vecs = [self.semantic_field.concept_embeddings[nid] for nid in recent_ids]
+                recent_vecs = [self.concept_coords[nid] for nid in recent_ids]
                 activations = [a.confidence for a in self.active_assemblies[-3:]]
                 self.meta_shards.create_meta_shard(recent_ids, recent_vecs, activations, self.semantic_field)
                 self.active_assemblies = self.active_assemblies[-1:]
                 
+        # Trigger dynamic memory consolidation during recovery mode or low energy budget
+        if self.energy_budget < 0.35 or self.reflection.cognitive_mode == 'recovery':
+            self.consolidate_memories()
+            
         self.tick += 1
         return ca
+
+    def consolidate_memories(self):
+        """
+        Sleep consolidation phase: decay weak concepts, run episodic replay, compress abstractions.
+        """
+        # 1. Sensory Forgetting (decay weak thoughts)
+        to_remove = []
+        for c, tensors in list(self.physics_tensors.items()):
+            if tensors["stability"] < 0.05 and tensors["activation"] < 0.1:
+                to_remove.append(c)
+                
+        for c in to_remove:
+            if c in self.concept_coords: del self.concept_coords[c]
+            if c in self.concept_velocities: del self.concept_velocities[c]
+            if c in self.physics_tensors: del self.physics_tensors[c]
+            if c in self.semantic_field.concept_embeddings:
+                del self.semantic_field.concept_embeddings[c]
+            if self.memory.graph.has_node(c):
+                self.memory.graph.remove_node(c)
+            if self.causal.causal_matrix.has_node(c):
+                self.causal.causal_matrix.remove_node(c)
+                
+        # 2. Episodic Replay (reactivate past memory traces)
+        if self.episodic_tensors and self.concept_coords:
+            import random
+            past_trace = random.choice(self.episodic_tensors)
+            for c, pos in self.concept_coords.items():
+                alignment = float(np.dot(pos, past_trace))
+                if alignment > 0.6:
+                    self.physics_tensors[c]["activation"] = min(1.0, self.physics_tensors[c]["activation"] + 0.15)
+                    self.physics_tensors[c]["stability"] = min(1.0, self.physics_tensors[c]["stability"] + 0.05)
+                    
+        # 3. Abstraction Compression (crystallize and compress working memory)
+        self.memory.memory_compression(threshold=0.75, semantic_engine=self.semantic_field)
+        
+        # Recharge energy budget after a successful consolidation (sleep) cycle
+        self.energy_budget = min(1.0, self.energy_budget + 0.35)
         
     def get_summary(self) -> Dict[str, Any]:
         return {
@@ -268,6 +395,8 @@ class GlobalCognitiveState:
 
     def save_state(self) -> Dict[str, Any]:
         """ISSUE 16: Basic serialization layer."""
+        coords_serial = {k: v.tolist() for k, v in self.concept_coords.items()}
+        vel_serial = {k: v.tolist() for k, v in self.concept_velocities.items()}
         return {
             "tick": self.tick,
             "entropy": self.entropy,
@@ -276,7 +405,10 @@ class GlobalCognitiveState:
             "surprise": self.surprise,
             "energy_budget": self.energy_budget,
             "latent_field": self.latent_field.tolist() if self.latent_field is not None else None,
-            "working_latent": self.working_latent.tolist() if self.working_latent is not None else None
+            "working_latent": self.working_latent.tolist() if self.working_latent is not None else None,
+            "concept_coords": coords_serial,
+            "concept_velocities": vel_serial,
+            "physics_tensors": self.physics_tensors
         }
         
     def load_state(self, state_dict: Dict[str, Any]):
@@ -292,3 +424,11 @@ class GlobalCognitiveState:
         
         w_field = state_dict.get("working_latent")
         if w_field is not None: self.working_latent = np.array(w_field)
+        
+        coords_dict = state_dict.get("concept_coords", {})
+        self.concept_coords = {k: np.array(v) for k, v in coords_dict.items()}
+        
+        vel_dict = state_dict.get("concept_velocities", {})
+        self.concept_velocities = {k: np.array(v) for k, v in vel_dict.items()}
+        
+        self.physics_tensors = state_dict.get("physics_tensors", {})

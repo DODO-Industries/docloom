@@ -173,15 +173,39 @@ input:focus, textarea:focus, select:focus {
   background: #f59e0b;
 }
 
+#L::-webkit-scrollbar, #R::-webkit-scrollbar, .agent-console::-webkit-scrollbar {
+  width: 4px;
+}
+#L::-webkit-scrollbar-track, #R::-webkit-scrollbar-track, .agent-console::-webkit-scrollbar-track {
+  background: transparent;
+}
+#L::-webkit-scrollbar-thumb, #R::-webkit-scrollbar-thumb, .agent-console::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+#L::-webkit-scrollbar-thumb:hover, #R::-webkit-scrollbar-thumb:hover, .agent-console::-webkit-scrollbar-thumb:hover {
+  background: var(--a2);
+}
+
 .shd {
-  font-size: 0.65rem;
-  color: #9ca3af;
+  font-size: 0.7rem;
+  color: var(--txt);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
-  margin: 8px 0 6px 0;
-  border-left: 2px solid var(--a2);
-  padding-left: 8px;
-  font-weight: 700;
+  letter-spacing: 2px;
+  margin: 16px 0 8px 0;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shd::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--a2);
+  box-shadow: 0 0 8px var(--a2);
+  border-radius: 1px;
 }
 .mv {
   font-size: 0.8rem;
@@ -192,18 +216,21 @@ input:focus, textarea:focus, select:focus {
 }
 .tag {
   display: inline-block;
-  padding: 3px 8px;
-  margin: 2px;
-  border-radius: 20px;
+  padding: 4px 8px;
+  margin: 3px 2px;
+  border-radius: 6px;
   font-size: 0.65rem;
   background: rgba(56, 189, 248, 0.05);
   color: var(--a2);
-  border: 1px solid rgba(56, 189, 248, 0.12);
-  transition: all 0.2s;
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .tag:hover {
   background: var(--a2);
+  border-color: var(--a2);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
   color: #000;
+  transform: translateY(-1px);
 }
 .pill {
   font-size: 0.55rem;
@@ -220,31 +247,64 @@ input:focus, textarea:focus, select:focus {
 .telemetry-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 .gauge-card {
-  background: rgba(255, 255, 255, 0.01);
+  position: relative;
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--bdr);
-  border-radius: 10px;
-  padding: 8px;
+  border-radius: 12px;
+  padding: 14px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+.gauge-card:hover {
+  border-color: var(--a2);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.15);
+  transform: translateY(-2px);
+}
+.gauge-svg {
+  width: 54px;
+  height: 54px;
+  margin-bottom: 6px;
+  transform: rotate(-90deg);
+}
+.gauge-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 3.5;
+}
+.gauge-fill {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.gauge-fill.energy { stroke: #fb7185; filter: drop-shadow(0 0 3px rgba(251, 113, 133, 0.5)); }
+.gauge-fill.coherence { stroke: #34d399; filter: drop-shadow(0 0 3px rgba(52, 211, 153, 0.5)); }
+.gauge-fill.entropy { stroke: #22d3ee; filter: drop-shadow(0 0 3px rgba(34, 211, 238, 0.5)); }
+.gauge-fill.surprise { stroke: #fbbf24; filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.5)); }
+
 .gauge-title {
   font-size: 0.55rem;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #6b7280;
-  margin-top: 2px;
+  letter-spacing: 1.5px;
+  color: #9ca3af;
+  margin-top: 4px;
+  font-weight: 600;
 }
 .gauge-value {
+  position: absolute;
+  top: 24px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.85rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 800;
   color: var(--txt);
+  text-shadow: 0 0 10px rgba(255,255,255,0.2);
 }
 .canvas-container {
   position: relative;
@@ -330,13 +390,57 @@ input:focus, textarea:focus, select:focus {
 .agent-console {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.6rem;
-  background: rgba(0,0,0,0.4);
+  background: rgba(2, 4, 8, 0.85);
   border: 1px solid var(--bdr);
-  border-radius: 6px;
-  padding: 8px;
-  max-height: 100px;
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 110px;
   overflow-y: auto;
-  color: #10b981;
+  color: #34d399;
+  position: relative;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+}
+.agent-console::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+  background-size: 100% 3px, 3px 100%;
+  pointer-events: none;
+  border-radius: 8px;
+}
+.console-cursor {
+  display: inline-block;
+  width: 5px;
+  height: 10px;
+  background: currentColor;
+  margin-left: 2px;
+  animation: blink-cursor 1s infinite steps(2, start);
+}
+@keyframes blink-cursor {
+  to { visibility: hidden; }
+}
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-family: 'Outfit';
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.25s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.tab-btn:hover {
+  color: var(--txt);
+}
+.tab-btn.active {
+  color: var(--a2);
+  border-bottom-color: var(--a2);
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
 }
 </style>
 </head>
@@ -389,7 +493,13 @@ input:focus, textarea:focus, select:focus {
   <div class="shd">Substrate Legend</div>
   <div style="font-size: 0.7rem; line-height: 1.6; color: #9ca3af; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid var(--bdr); margin-bottom: 12px;">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-      <span style="color:#34d399">🟢</span> <span>Stored Concept Shard</span>
+      <span style="color:#34d399">🟢</span> <span>Individual Thought Node</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#818cf8">🌐</span> <span>Shard (Attracted Thought Cluster)</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+      <span style="color:#fbbf24">🔶</span> <span>Meta-Shard (High-Level Abstraction)</span>
     </div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
       <span style="color:#fbbf24">🟡</span> <span>Active Spotlight (Attention focus)</span>
@@ -399,9 +509,6 @@ input:focus, textarea:focus, select:focus {
     </div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
       <span style="color:#818cf8">🟣</span> <span>working_latent Orb (Working memory)</span>
-    </div>
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-      <span style="color:#fbbf24">🔶</span> <span>Abstraction Crystal (Meta-Shard)</span>
     </div>
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
       <span style="color:#a78bfa">🕸️</span> <span>Attractor Basin (Crystallized Assembly)</span>
@@ -424,57 +531,91 @@ input:focus, textarea:focus, select:focus {
 </div>
 
 <div id="R" class="glass">
-  <div class="shd">Neuron Inspector</div>
-  <div id="neuron-inspector" class="card" style="border-color: var(--a); min-height:80px; transition: all 0.3s;">
-    <p style="color:var(--muted); font-size:0.75rem; text-align:center;">Click a concept node in 3D to decode its cognitive properties.</p>
+  <!-- Tab Buttons -->
+  <div style="display:flex; border-bottom:1px solid var(--bdr); margin-bottom:12px; padding-bottom:4px; gap:8px;">
+    <button id="tab-btn-hub" class="tab-btn active" onclick="switchRightTab('hub')">🧠 Cognitive Hub</button>
+    <button id="tab-btn-mind" class="tab-btn" onclick="switchRightTab('mind')">⚡ State & Sandbox</button>
   </div>
 
-  <div class="shd">Substrate Telemetry HUD</div>
-  <div class="telemetry-grid">
-    <div class="gauge-card">
-      <div id="val-energy" class="gauge-value">1.00</div>
-      <div class="gauge-title">Energy</div>
+  <!-- Tab 1: Hub -->
+  <div id="right-tab-hub">
+    <div class="shd">Neuron Inspector</div>
+    <div id="neuron-inspector" class="card" style="border-color: var(--a); min-height:80px; transition: all 0.3s;">
+      <p style="color:var(--muted); font-size:0.75rem; text-align:center;">Click a concept node in 3D to decode its cognitive properties.</p>
     </div>
-    <div class="gauge-card">
-      <div id="val-coherence" class="gauge-value">1.00</div>
-      <div class="gauge-title">Coherence</div>
+
+    <div class="shd">Substrate Telemetry HUD</div>
+    <div class="telemetry-grid">
+      <div class="gauge-card">
+        <svg class="gauge-svg" viewBox="0 0 36 36">
+          <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          <path id="gauge-energy-path" class="gauge-fill energy" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        </svg>
+        <div id="val-energy" class="gauge-value">1.00</div>
+        <div class="gauge-title">Energy</div>
+      </div>
+      <div class="gauge-card">
+        <svg class="gauge-svg" viewBox="0 0 36 36">
+          <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          <path id="gauge-coherence-path" class="gauge-fill coherence" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        </svg>
+        <div id="val-coherence" class="gauge-value">1.00</div>
+        <div class="gauge-title">Coherence</div>
+      </div>
+      <div class="gauge-card">
+        <svg class="gauge-svg" viewBox="0 0 36 36">
+          <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          <path id="gauge-entropy-path" class="gauge-fill entropy" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        </svg>
+        <div id="val-entropy" class="gauge-value">0.00</div>
+        <div class="gauge-title">Entropy</div>
+      </div>
+      <div class="gauge-card">
+        <svg class="gauge-svg" viewBox="0 0 36 36">
+          <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          <path id="gauge-surprise-path" class="gauge-fill surprise" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        </svg>
+        <div id="val-surprise" class="gauge-value">0.00</div>
+        <div class="gauge-title">Surprise</div>
+      </div>
     </div>
-    <div class="gauge-card">
-      <div id="val-entropy" class="gauge-value">0.00</div>
-      <div class="gauge-title">Entropy</div>
+
+    <div class="lbl" style="margin-top:10px;">Cognitive Field History</div>
+    <div class="canvas-container">
+      <canvas id="chart-canvas" width="340" height="80" style="width:100%;height:100%"></canvas>
     </div>
-    <div class="gauge-card">
-      <div id="val-surprise" class="gauge-value">0.00</div>
-      <div class="gauge-title">Surprise</div>
+
+    <div id="sim-mode-card" class="card">
+      <div class="pill" id="sim-cognitive-mode">EXPLORATION</div>
+      <div class="mv" id="sim-thought-desc" style="font-size:0.75rem;margin-top:4px">System state initializing...</div>
     </div>
   </div>
 
-  <div class="lbl">Cognitive Field History</div>
-  <div class="canvas-container">
-    <canvas id="chart-canvas" width="340" height="80" style="width:100%;height:100%"></canvas>
-  </div>
+  <!-- Tab 2: State & Sandbox -->
+  <div id="right-tab-mind" style="display:none;">
+    <div class="shd">Emergent Abstractions & Active assemblies</div>
+    <div id="sim-assemblies" style="max-height:220px;overflow-y:auto;margin-bottom:12px">
+      <div class="card" style="border: 1px dashed rgba(167,139,250,0.25); background: rgba(167,139,250,0.02); text-align: center; color: rgba(255,255,255,0.5); font-size: 0.7rem; padding: 16px; border-radius: 8px; border-left: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+        <span style="font-size:1.1rem;">🔮</span>
+        <span>No active assemblies or abstractions crystallized.</span>
+      </div>
+    </div>
 
-  <div id="sim-mode-card" class="card">
-    <div class="pill" id="sim-cognitive-mode">EXPLORATION</div>
-    <div class="mv" id="sim-thought-desc" style="font-size:0.75rem;margin-top:4px">System state initializing...</div>
-  </div>
+    <div class="shd">Workspace Working Memory</div>
+    <div id="sim-wm-status" style="max-height:140px;overflow-y:auto;margin-bottom:12px">
+      <div class="card" style="border: 1px dashed rgba(56,189,248,0.25); background: rgba(56,189,248,0.02); text-align: center; color: rgba(255,255,255,0.5); font-size: 0.7rem; padding: 16px; border-radius: 8px; border-left: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+        <span style="font-size:1.1rem;">⚡</span>
+        <span>Workspace Working Memory Empty.</span>
+      </div>
+    </div>
 
-  <div class="shd">Emergent Abstractions & Active assemblies</div>
-  <div id="sim-assemblies" style="max-height:80px;overflow-y:auto;font-size:0.7rem;color:#6b7280;margin-bottom:4px">
-    No active assemblies crystallized.
+    <div class="shd">Agent Planner & Execution Sandbox</div>
+    <div class="lbl">HTN PLAN TREE</div>
+    <div id="agent-planner-tree" class="agent-console" style="margin-bottom:10px;color:#38bdf8;max-height:160px;">NO ACTIVE PLAN</div>
+    
+    <div class="lbl">SANDBOX CMD AUDIT LOGS</div>
+    <div id="agent-execution-logs" class="agent-console" style="color:#f59e0b;max-height:160px;">SANDBOX ARMED</div>
   </div>
-
-  <div class="shd">Workspace Working Memory</div>
-  <div id="sim-wm-status" style="max-height:80px;overflow-y:auto;font-size:0.7rem;color:#6b7280;margin-bottom:4px">
-    Workspace empty.
-  </div>
-
-  <div class="shd">Agent Planner & Execution Sandbox</div>
-  <div class="lbl">HTN PLAN TREE</div>
-  <div id="agent-planner-tree" class="agent-console" style="margin-bottom:4px;color:#38bdf8">NO ACTIVE PLAN</div>
-  
-  <div class="lbl">SANDBOX CMD AUDIT LOGS</div>
-  <div id="agent-execution-logs" class="agent-console" style="color:#f59e0b">SANDBOX ARMED</div>
 </div>
 
 <script>
@@ -525,14 +666,18 @@ scene.add(simGroup);
 let simConcepts = {};       // concept_name -> Mesh
 let simCausalLines = [];    // causal edge lines
 let clusterRings = [];      // cluster halo meshes
+let simMetaShards = {};     // meta_id -> Mesh (Cone)
+let simMetaLinks = [];      // connection lines from meta shards to child thoughts
 let latentOrbMesh = null;
 let workingOrbMesh = null;
 let conceptLabelDivs = {};
 let queryProbeMesh = null;
+let queryResonanceMesh = null;
 let queryProbeLines = [];
 let highlightedConcepts = [];
 let hoveredConcept = null;
 let lastAddedConcept = null; // for the pulse effect on new entries
+let lastSpawnAnchor = null;  // parent node for physics attraction spawning
 
 // Dynamic sphere radius based on how many nodes exist
 function getNodeRadius() {
@@ -581,6 +726,8 @@ function clear3DSubstrate() {
   simConcepts = {};
   simCausalLines = [];
   clusterRings = [];
+  simMetaShards = {};
+  simMetaLinks = [];
   latentOrbMesh = null;
   workingOrbMesh = null;
   queryProbeMesh = null;
@@ -640,34 +787,109 @@ async function injectCustomThought() {
   setTimeout(() => { lastAddedConcept = null; }, 4000);
 }
 
+let isStressTesting = false;
+
 async function runMemoryStressTest() {
   const btn = document.querySelector("button[onclick='runMemoryStressTest()']");
   const originalText = btn.textContent;
-  btn.textContent = "🧪 Injecting 1000+ Shards...";
-  btn.disabled = true;
+  
+  if (isStressTesting) {
+    // Toggle: if already running, stop the stream
+    isStressTesting = false;
+    btn.textContent = "Stopping...";
+    return;
+  }
+  
+  isStressTesting = true;
+  btn.textContent = "🛑 Stop Stream Test";
+  btn.style.background = "linear-gradient(135deg, #ef4444, #b91c1c)";
   
   try {
-    const res = await fetch(`${API_BASE}/loom/api/cognition/stress_test`, { method: 'POST' });
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    console.log("Stress test initialised:", data);
+    // 1. Load the list of raw stress shards from the server
+    const shardsRes = await fetch(`${API_BASE}/loom/api/cognition/stress_shards`);
+    if (!shardsRes.ok) throw new Error("Could not fetch stress shards list");
+    const shardsData = await shardsRes.json();
+    const shards = shardsData.shards;
     
-    // Clear current substrate
-    clear3DSubstrate();
-    telemetryHistory = { energy: [], coherence: [], entropy: [], surprise: [], labels: [] };
-    drawTelemetryChart();
-    resetInspector();
-    clearQueryProbe();
+    console.log(`Streaming ${shards.length} shards one-by-one...`);
     
-    // Render the new state
-    renderState(data);
-    alert("Loaded 1,000+ concept shards into memory successfully!");
+    let prevConcept = null;
+    
+    // Calculate total individual thoughts count
+    let totalThoughts = 0;
+    shards.forEach(s => {
+      if (s && s.thoughts && Array.isArray(s.thoughts)) {
+        totalThoughts += s.thoughts.length;
+      } else {
+        totalThoughts += 1;
+      }
+    });
+    
+    let thoughtIndex = 0;
+    
+    for (let i = 0; i < shards.length; i++) {
+      if (!isStressTesting) break;
+      
+      const shardObj = shards[i];
+      const thoughts = (shardObj && shardObj.thoughts && Array.isArray(shardObj.thoughts)) ? shardObj.thoughts : [shardObj];
+      
+      for (let j = 0; j < thoughts.length; j++) {
+        if (!isStressTesting) break;
+        
+        thoughtIndex++;
+        btn.textContent = `🛑 Stop (${thoughtIndex}/${totalThoughts})`;
+        
+        const thought = thoughts[j];
+        
+        // Inject single thought/concept
+        const injectRes = await fetch(`${API_BASE}/loom/api/cognition/inject_shard`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shard: thought,
+            prev_concept: prevConcept
+          })
+        });
+        
+        if (!injectRes.ok) {
+          console.error(`Failed to inject thought ${thoughtIndex}: ${thought}`);
+          continue;
+        }
+        
+        const injectData = await injectRes.json();
+        if (injectData.success) {
+          const spawnAnchor = prevConcept;
+          prevConcept = injectData.last_concept;
+          
+          lastSpawnAnchor = spawnAnchor;
+          lastAddedConcept = prevConcept;
+          
+          const currentConcept = prevConcept;
+          const currentAnchor = spawnAnchor;
+          setTimeout(() => { 
+            if (lastAddedConcept === currentConcept) lastAddedConcept = null; 
+            if (lastSpawnAnchor === currentAnchor) lastSpawnAnchor = null;
+          }, 3000);
+          
+          // Render updated 3D coordinate placements and telemetry
+          renderState(injectData.state);
+        }
+        
+        // 180ms delay for smooth thought-by-thought layout transitions
+        await new Promise(resolve => setTimeout(resolve, 180));
+      }
+    }
+    
+    if (isStressTesting) {
+      alert("All test shards loaded into memory successfully!");
+    }
   } catch(e) {
     console.error("Stress test failed:", e);
     alert("Stress test failed to load: " + e.message);
   } finally {
+    isStressTesting = false;
     btn.textContent = originalText;
-    btn.disabled = false;
+    btn.style.background = "linear-gradient(135deg, #818cf8, #4f46e5)";
   }
 }
 
@@ -675,6 +897,10 @@ function clearQueryProbe() {
   if (queryProbeMesh) {
     simGroup.remove(queryProbeMesh);
     queryProbeMesh = null;
+  }
+  if (queryResonanceMesh) {
+    simGroup.remove(queryResonanceMesh);
+    queryResonanceMesh = null;
   }
   queryProbeLines.forEach(l => simGroup.remove(l));
   queryProbeLines = [];
@@ -740,6 +966,19 @@ async function queryMemory() {
     queryProbeMesh.position.set(d.query_coords[0], d.query_coords[1], d.query_coords[2]);
     simGroup.add(queryProbeMesh);
     
+    // Create queryResonanceMesh (a wireframe sphere representing the search resonance wave)
+    const resonanceGeo = new THREE.SphereGeometry(150, 24, 24);
+    const resonanceMat = new THREE.MeshBasicMaterial({
+      color: 0xff00ff,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false
+    });
+    queryResonanceMesh = new THREE.Mesh(resonanceGeo, resonanceMat);
+    queryResonanceMesh.position.copy(queryProbeMesh.position);
+    simGroup.add(queryResonanceMesh);
+    
     // Draw lines and highlight targets
     d.matches.forEach(match => {
       const targetMesh = simConcepts[match.concept];
@@ -754,6 +993,7 @@ async function queryMemory() {
           opacity: 0.8
         });
         const line = new THREE.Line(geo, lineMat);
+        line.userData = { target: match.concept };
         line.computeLineDistances();
         simGroup.add(line);
         queryProbeLines.push(line);
@@ -768,24 +1008,42 @@ async function queryMemory() {
     // Render query retrieval results into the Inspector
     let html = `
       <div style="font-size:0.75rem; line-height:1.5;">
-        <div style="font-weight:700; color:#ff00ff; font-size:0.85rem; margin-bottom:8px; border-bottom:1px solid var(--bdr); padding-bottom:4px;">
-          🔍 Query Probe: "${d.query}"
+        <div style="font-weight:800; color:#ff00ff; font-size:0.85rem; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+          <span>🔍 QUERY RETRIEVAL</span>
+          <span class="pill" style="background:rgba(255,0,255,0.1); color:#ff00ff; border:1px solid rgba(255,0,255,0.2); font-size:0.55rem;">PROBE</span>
         </div>
+        <div style="font-size:0.8rem; font-weight:700; color:#fff; margin-bottom:6px;">"${d.query}"</div>
         <div style="margin-bottom:8px;">
           <span class="pill" style="background:rgba(255,0,255,0.15); color:#ff00ff">3D COORD</span>
-          <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">[X: ${d.query_coords[0].toFixed(1)}, Y: ${d.query_coords[1].toFixed(1)}, Z: ${d.query_coords[2].toFixed(1)}]</span>
+          <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">[X: ${d.query_coords[0].toFixed(0)}, Y: ${d.query_coords[1].toFixed(0)}, Z: ${d.query_coords[2].toFixed(0)}]</span>
         </div>
-        <div class="lbl" style="color:#ff00ff; margin-bottom:4px;">Retrieved Memories (Top Matches)</div>
+        <div class="lbl" style="color:#ff00ff; margin-bottom:6px; font-weight:700;">Retrieved Memories (Graph Dijkstra Trace)</div>
     `;
     
     d.matches.forEach((m, idx) => {
+      let pathHtml = '';
+      if (m.path && m.path.length > 1) {
+        pathHtml = `<div style="margin-top:4px; font-family:'JetBrains Mono'; font-size:0.55rem; color:#94a3b8; background:rgba(255,255,255,0.03); padding:4px 6px; border-radius:4px; overflow-x:auto; white-space:nowrap; border:1px solid rgba(255,255,255,0.05);">
+          <span style="color:#ff00ff; font-weight:700;">PATH:</span> ${m.path.map(p => p.length > 15 ? p.substring(0, 13) + '..' : p).join(' ➔ ')}
+        </div>`;
+      } else if (m.source_seed) {
+        pathHtml = `<div style="margin-top:4px; font-family:'JetBrains Mono'; font-size:0.55rem; color:#10b981; font-weight:700;">
+          ✦ SEED MATCH (Direct cosine anchor)
+        </div>`;
+      } else {
+        pathHtml = `<div style="margin-top:4px; font-family:'JetBrains Mono'; font-size:0.55rem; color:#94a3b8;">
+          Disconnected (Penalized semantic fallback)
+        </div>`;
+      }
+      
       html += `
-        <div class="card" style="margin-bottom:6px; border-color: rgba(255,0,255,0.3); padding:8px; cursor:pointer;" onclick="inspectSimNode(\`${m.concept.replace(/'/g, "\\'")}\`)">
-          <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+        <div class="card" style="margin-bottom:6px; border-color: rgba(255,0,255,0.25); padding:8px; cursor:pointer; background:rgba(0,0,0,0.2);" onclick="inspectSimNode(\`${m.concept.replace(/'/g, "\\'")}\`)">
+          <div style="display:flex; justify-content:space-between; margin-bottom:2px; align-items:center;">
             <span style="font-weight:700; color:var(--a2)">#${idx+1} Match</span>
-            <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#ff00ff">${(m.similarity * 100).toFixed(1)}% Match</span>
+            <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#ff00ff; font-weight:700;">${(m.score * 100).toFixed(0)}% Match</span>
           </div>
-          <div style="font-size:0.7rem; color:#f3f4f6;">${m.concept}</div>
+          <div style="font-size:0.7rem; color:#f3f4f6; font-weight:500;">${m.concept}</div>
+          ${pathHtml}
         </div>
       `;
     });
@@ -797,7 +1055,6 @@ async function queryMemory() {
     controls.target.copy(queryProbeMesh.position);
     camera.position.set(d.query_coords[0], d.query_coords[1] + 300, d.query_coords[2] + 600);
     controls.update();
-    
   } catch (e) {
     console.error("Query retrieval error:", e);
     alert("Query failed: " + e.message);
@@ -824,11 +1081,17 @@ function renderState(d) {
   lastCognitionData = d;
   lastCognitionData.selectedConcept = previousSelected;
   
-  // Update Telemetry indicators
+  // Update Telemetry indicators text
   document.getElementById('val-energy').textContent = d.metrics.energy.toFixed(2);
   document.getElementById('val-coherence').textContent = d.metrics.coherence.toFixed(2);
   document.getElementById('val-entropy').textContent = d.metrics.entropy.toFixed(2);
   document.getElementById('val-surprise').textContent = d.metrics.surprise.toFixed(2);
+
+  // Update Telemetry SVG path stroke-dasharray values (circumference is 100)
+  document.getElementById('gauge-energy-path').setAttribute('stroke-dasharray', `${(d.metrics.energy * 100).toFixed(1)}, 100`);
+  document.getElementById('gauge-coherence-path').setAttribute('stroke-dasharray', `${(d.metrics.coherence * 100).toFixed(1)}, 100`);
+  document.getElementById('gauge-entropy-path').setAttribute('stroke-dasharray', `${(d.metrics.entropy * 100).toFixed(1)}, 100`);
+  document.getElementById('gauge-surprise-path').setAttribute('stroke-dasharray', `${(d.metrics.surprise * 100).toFixed(1)}, 100`);
   
   const modeBadge = document.getElementById('sim-cognitive-mode');
   modeBadge.textContent = d.metrics.mode.toUpperCase();
@@ -859,23 +1122,52 @@ function renderState(d) {
   
   // Assemblies & Working memory lists
   const attDiv = document.getElementById('sim-assemblies');
-  if (d.active_assemblies.length === 0) {
-    attDiv.innerHTML = "No active assemblies crystallized.";
-  } else {
-    attDiv.innerHTML = d.active_assemblies.map(a => {
-      return `<div style="background:rgba(255,255,255,0.02);padding:4px 8px;border-radius:6px;margin-bottom:4px;border:1px solid rgba(56,189,248,0.1)">
-        <span class="pill" style="background:rgba(56,189,248,0.15);color:var(--a2)">BASIN: ${a.basin_strength.toFixed(2)}</span>
-        <b>${a.dominant}</b> (${Object.keys(a.activations).length} concepts)
+  let assembliesHtml = '';
+  if (d.active_assemblies && d.active_assemblies.length > 0) {
+    assembliesHtml = d.active_assemblies.map(a => {
+      return `<div style="background:rgba(255,255,255,0.02);padding:6px 10px;border-radius:8px;margin-bottom:6px;border:1px solid rgba(167,139,250,0.1); display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <b style="color:#c084fc;">★ ${a.dominant}</b>
+          <div style="font-size:0.6rem; color:#9ca3af; margin-top:2px;">Size: ${Object.keys(a.activations).length} concepts · stability: ${a.stability.toFixed(2)}</div>
+        </div>
+        <span class="pill" style="background:rgba(167,139,250,0.15);color:#c084fc;border:1px solid rgba(167,139,250,0.25);">BASIN: ${a.basin_strength.toFixed(2)}</span>
       </div>`;
     }).join('');
+  }
+
+  let shardsHtml = '';
+  if (d.meta_shards && d.meta_shards.length > 0) {
+    shardsHtml = d.meta_shards.map(m => {
+      const cleanLabel = m.label.replace('Abstraction[', '').replace(']', '');
+      return `<div style="background:rgba(255,255,255,0.01);padding:6px 10px;border-radius:8px;margin-bottom:6px;border:1px solid rgba(245,158,11,0.15); display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <b style="color:#f59e0b;">🔶 ${cleanLabel}</b>
+          <div style="font-size:0.6rem; color:#9ca3af; margin-top:2px;">Children: ${m.children.length} thoughts · stability: ${m.stability.toFixed(2)}</div>
+        </div>
+        <span class="pill" style="background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.2);font-size:0.55rem;">Lvl: ${m.abstraction_level}</span>
+      </div>`;
+    }).join('');
+  }
+
+  if (!assembliesHtml && !shardsHtml) {
+    attDiv.innerHTML = `<div class="card" style="border: 1px dashed rgba(167,139,250,0.25); background: rgba(167,139,250,0.02); text-align: center; color: rgba(255,255,255,0.5); font-size: 0.7rem; padding: 16px; border-radius: 8px; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-left: none;">
+      <span style="font-size:1.1rem;">🔮</span>
+      <span>No active assemblies or abstractions crystallized.</span>
+    </div>`;
+  } else {
+    attDiv.innerHTML = assembliesHtml + shardsHtml;
   }
   
   const wmDiv = document.getElementById('sim-wm-status');
   if (d.working_memory.nodes.length === 0) {
-    wmDiv.innerHTML = "Workspace empty.";
+    wmDiv.innerHTML = `<div class="card" style="border: 1px dashed rgba(56,189,248,0.25); background: rgba(56,189,248,0.02); text-align: center; color: rgba(255,255,255,0.5); font-size: 0.7rem; padding: 16px; border-radius: 8px; margin-bottom: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-left: none;">
+      <span style="font-size:1.1rem;">⚡</span>
+      <span>Workspace Working Memory Empty.</span>
+    </div>`;
   } else {
     wmDiv.innerHTML = d.working_memory.nodes.map(n => {
-      return `<span class="tag">${n.id}: ${n.activation.toFixed(2)}</span>`;
+      const alpha = Math.min(1.0, Math.max(0.1, n.activation));
+      return `<span class="tag" style="background:rgba(56, 189, 248, ${(alpha*0.12).toFixed(2)}); border-color:rgba(56, 189, 248, ${(alpha*0.35).toFixed(2)}); color:rgba(255, 255, 255, ${(0.5+alpha*0.5).toFixed(2)}); font-family:'JetBrains Mono'; font-weight:700; cursor:pointer;" onclick="inspectSimNode(\`${n.id.replace(/'/g, "\\'")}\`)">${n.id} (${n.activation.toFixed(2)})</span>`;
     }).join(' ');
   }
   
@@ -947,25 +1239,25 @@ function updateAgentPanels(pipeline) {
   const execDiv = document.getElementById('agent-execution-logs');
   
   if (pipeline.status === 'blocked') {
-    execDiv.innerHTML = `<span style="color:#ef4444">> EXECUTION BLOCKED: ${pipeline.reason}</span>`;
-    plannerDiv.innerHTML = `<span style="color:#6b7280">NO PLAN ACTIVE</span>`;
+    execDiv.innerHTML = `<span style="color:#ef4444">> EXECUTION BLOCKED: ${pipeline.reason}</span><span class="console-cursor"></span>`;
+    plannerDiv.innerHTML = `<span style="color:#6b7280">NO PLAN ACTIVE</span><span class="console-cursor"></span>`;
     return;
   }
   
   const d = pipeline.decision || {};
   
   if (d.planning && d.planning.plan) {
-    plannerDiv.innerHTML = `GOAL: ${d.planning.goal}<br>` + d.planning.plan.map((t, i) => `  [${i+1}] ➔ ${t}`).join('<br>');
+    plannerDiv.innerHTML = `GOAL: ${d.planning.goal}<br>` + d.planning.plan.map((t, i) => `  [${i+1}] ➔ ${t}`).join('<br>') + `<span class="console-cursor"></span>`;
   } else {
-    plannerDiv.innerHTML = `NO ACTIVE PLAN<br>Provide Goal Constraint above...`;
+    plannerDiv.innerHTML = `NO ACTIVE PLAN<br>Provide Goal Constraint above...<span class="console-cursor"></span>`;
   }
   
   if (d.execution) {
-    execDiv.innerHTML = `> ACTION: ${d.execution.action}<br>> STATUS: ${d.execution.status}<br>> AUDIT: ${JSON.stringify(d.execution.execution_report)}`;
+    execDiv.innerHTML = `> ACTION: ${d.execution.action}<br>> STATUS: ${d.execution.status}<br>> AUDIT: ${JSON.stringify(d.execution.execution_report)}<span class="console-cursor"></span>`;
   } else if (d.reasoning && d.reasoning.length > 0) {
-    execDiv.innerHTML = `> Neuro-Symbolic Resolution:<br>` + d.reasoning.map(r => `  * ${r}`).join('<br>');
+    execDiv.innerHTML = `> Neuro-Symbolic Resolution:<br>` + d.reasoning.map(r => `  * ${r}`).join('<br>') + `<span class="console-cursor"></span>`;
   } else {
-    execDiv.innerHTML = `SANDBOX ARMED & IDLE`;
+    execDiv.innerHTML = `SANDBOX ARMED & IDLE<span class="console-cursor"></span>`;
   }
 }
 
@@ -1011,7 +1303,19 @@ function renderSubstrate3D(d) {
         opacity: 0.92
       });
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 18), mat);
-      mesh.position.copy(posVec);
+      
+      // Spawn at parent concept's position if new, else spawn directly at target coordinates
+      if (isNew) {
+        if (lastSpawnAnchor && simConcepts[lastSpawnAnchor]) {
+          mesh.position.copy(simConcepts[lastSpawnAnchor].position);
+        } else {
+          mesh.position.set(0, 0, 0);
+        }
+      } else {
+        mesh.position.copy(posVec);
+      }
+      
+      mesh.userData.targetPos = posVec;
       mesh.userData.isNew = isNew;
       mesh.userData.newPulseStart = isNew ? Date.now() : null;
       mesh.userData.conceptThoughts = conceptThoughts[concept] || [];
@@ -1056,11 +1360,17 @@ function renderSubstrate3D(d) {
     const toMesh   = simConcepts[link.to];
     if (fromMesh && toMesh) {
       const geo = new THREE.BufferGeometry().setFromPoints([fromMesh.position, toMesh.position]);
+      
+      // Highlight new synapses (causal links) connected to/from the newly entered thought
+      const isNewSynapse = lastAddedConcept && (link.from === lastAddedConcept || link.to === lastAddedConcept);
+      
       const mat = new THREE.LineBasicMaterial({
-        color: 0x38bdf8, transparent: true,
-        opacity: 0.25 + (link.weight * 0.35)
+        color: isNewSynapse ? 0xff33aa : 0x38bdf8, // Neon pink for new synapses
+        transparent: true,
+        opacity: isNewSynapse ? 1.0 : (0.25 + (link.weight * 0.35))
       });
       const line = new THREE.Line(geo, mat);
+      line.userData = { from: link.from, to: link.to };
       simGroup.add(line);
       simCausalLines.push(line);
     }
@@ -1142,28 +1452,98 @@ function renderSubstrate3D(d) {
     }
   });
 
-  // Meta shard crystals (temporary)
+  // ── Meta Shard Crystals ──────────────────────────────────────────
+  const currentMetaShards = {};
   d.meta_shards.forEach(meta => {
-    let cx2 = 0, cy2 = 0, cz2 = 0, count2 = 0;
+    let cx = 0, cy = 0, cz = 0, count = 0;
     meta.children.forEach(c => {
-      if (simConcepts[c]) {
-        cx2 += simConcepts[c].position.x;
-        cy2 += simConcepts[c].position.y;
-        cz2 += simConcepts[c].position.z;
-        count2++;
+      const targetPos = currentConcepts[c];
+      if (targetPos) {
+        cx += targetPos[0];
+        cy += targetPos[1];
+        cz += targetPos[2];
+        count++;
       }
     });
-    if (count2 > 0) {
-      const pos = new THREE.Vector3(cx2/count2, (cy2/count2) + 120, cz2/count2);
-      const crystal = new THREE.Mesh(
-        new THREE.ConeGeometry(r * 1.5, r * 4, 4),
-        new THREE.MeshPhongMaterial({ color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 1.0, transparent: true, opacity: 0.9 })
-      );
-      crystal.position.copy(pos);
-      simGroup.add(crystal);
-      setTimeout(() => simGroup.remove(crystal), 3000);
+    if (count > 0) {
+      // Position the crystal above the centroid of its children
+      const posVec = new THREE.Vector3(cx / count, (cy / count) + 120, cz / count);
+      currentMetaShards[meta.id] = { pos: posVec, meta: meta };
     }
   });
+
+  // Render and update Meta Shard crystal cones
+  for (let metaId in currentMetaShards) {
+    const item = currentMetaShards[metaId];
+    let crystal = simMetaShards[metaId];
+    if (!crystal) {
+      const col = new THREE.Color(0xfbbf24);
+      const mat = new THREE.MeshPhongMaterial({
+        color: col,
+        emissive: col,
+        emissiveIntensity: 1.0,
+        transparent: true,
+        opacity: 0.9
+      });
+      crystal = new THREE.Mesh(new THREE.ConeGeometry(r * 1.5, r * 4, 4), mat);
+      crystal.position.copy(item.pos);
+      simGroup.add(crystal);
+      simMetaShards[metaId] = crystal;
+    } else {
+      crystal.position.copy(item.pos);
+    }
+    
+    // Add floating label for meta-shard that is always displayed
+    const cleanLabel = item.meta.label.replace('Abstraction[', '').replace(']', '');
+    const metaLabel = document.createElement('div');
+    metaLabel.className = 'node-label';
+    metaLabel.style.display = 'block';
+    metaLabel.style.borderColor = 'rgba(245, 158, 11, 0.6)';
+    metaLabel.style.color = '#fbbf24';
+    metaLabel.textContent = `🔶 ${cleanLabel}`;
+    document.getElementById('labels-container').appendChild(metaLabel);
+    
+    conceptLabelDivs[`__meta__${metaId}`] = {
+      label: metaLabel,
+      pos: crystal.position
+    };
+  }
+
+  // Prune vanished meta shards
+  for (let metaId in simMetaShards) {
+    if (!currentMetaShards[metaId]) {
+      simGroup.remove(simMetaShards[metaId]);
+      delete simMetaShards[metaId];
+    }
+  }
+
+  // Refresh meta links
+  simMetaLinks.forEach(l => simGroup.remove(l));
+  simMetaLinks = [];
+  for (let metaId in currentMetaShards) {
+    const item = currentMetaShards[metaId];
+    const crystal = simMetaShards[metaId];
+    if (crystal) {
+      item.meta.children.forEach(childName => {
+        const childMesh = simConcepts[childName];
+        if (childMesh) {
+          const geo = new THREE.BufferGeometry().setFromPoints([crystal.position, childMesh.position]);
+          const lineMat = new THREE.LineDashedMaterial({
+            color: 0xfbbf24,
+            dashSize: 6,
+            gapSize: 3,
+            transparent: true,
+            opacity: 0.5
+          });
+          const line = new THREE.Line(geo, lineMat);
+          line.userData = { fromMeta: metaId, toChild: childName };
+          line.computeLineDistances();
+          simGroup.add(line);
+          simMetaLinks.push(line);
+        }
+      });
+    }
+  }
 
   // Orb placement
   const hasConcepts = Object.keys(currentConcepts).length > 0;
@@ -1221,6 +1601,19 @@ function updateHUDLabels() {
       continue;
     }
 
+    // Meta shard labels: always shown
+    if (key.startsWith('__meta__')) {
+      const pos = item.pos.clone();
+      pos.project(camera);
+      if (pos.z > 1) { item.label.style.display = 'none'; continue; }
+      const x = (pos.x * 0.5 + 0.5) * w;
+      const y = (pos.y * -0.5 + 0.5) * h;
+      item.label.style.display = 'block';
+      item.label.style.left = `${x}px`;
+      item.label.style.top  = `${y - 20}px`;
+      continue;
+    }
+
     const isSelected   = lastCognitionData && lastCognitionData.selectedConcept === key;
     const isHovered    = hoveredConcept === key;
     const isHighlighted = highlightedConcepts.includes(key);
@@ -1242,10 +1635,52 @@ function updateHUDLabels() {
   }
 }
 
+function updateLines() {
+  // Update causal links
+  simCausalLines.forEach(line => {
+    const fromMesh = simConcepts[line.userData.from];
+    const toMesh   = simConcepts[line.userData.to];
+    if (fromMesh && toMesh) {
+      line.geometry.setFromPoints([fromMesh.position, toMesh.position]);
+      line.geometry.attributes.position.needsUpdate = true;
+      line.geometry.computeBoundingBox();
+      line.geometry.computeBoundingSphere();
+    }
+  });
+
+  // Update query probe links if visible
+  if (queryProbeMesh && queryProbeLines.length > 0) {
+    queryProbeLines.forEach(line => {
+      const targetMesh = simConcepts[line.userData.target];
+      if (targetMesh) {
+        line.geometry.setFromPoints([queryProbeMesh.position, targetMesh.position]);
+        line.geometry.attributes.position.needsUpdate = true;
+        line.geometry.computeBoundingBox();
+        line.geometry.computeBoundingSphere();
+        line.computeLineDistances();
+      }
+    });
+  }
+
+  // Update meta-shard connection lines
+  simMetaLinks.forEach(line => {
+    const crystal = simMetaShards[line.userData.fromMeta];
+    const childMesh = simConcepts[line.userData.toChild];
+    if (crystal && childMesh) {
+      line.geometry.setFromPoints([crystal.position, childMesh.position]);
+      line.geometry.attributes.position.needsUpdate = true;
+      line.geometry.computeBoundingBox();
+      line.geometry.computeBoundingSphere();
+      line.computeLineDistances();
+    }
+  });
+}
+
 /* ─ ANIMATION LOOP ─ */
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
+    updateLines();
 
     const now = Date.now();
 
@@ -1302,6 +1737,14 @@ function animate() {
       queryProbeMesh.rotation.x += 0.01;
       const scale = 1.0 + Math.sin(now * 0.005) * 0.15;
       queryProbeMesh.scale.set(scale, scale, scale);
+    }
+    
+    if (queryResonanceMesh) {
+      queryResonanceMesh.rotation.y += 0.003;
+      queryResonanceMesh.rotation.z += 0.001;
+      const waveT = (Date.now() * 0.0008) % 1.0;
+      queryResonanceMesh.scale.set(waveT * 2.0, waveT * 2.0, waveT * 2.0);
+      queryResonanceMesh.material.opacity = 0.25 * (1.0 - waveT);
     }
     
     updateHUDLabels();
@@ -1411,7 +1854,6 @@ function inspectSimNode(conceptName) {
     const wmNode  = lastCognitionData.working_memory.nodes.find(n => n.id === conceptName);
     const wmActivation = wmNode ? wmNode.activation : 0.0;
     const assembly    = lastCognitionData.active_assemblies.find(a => a.dominant === conceptName);
-    const parentMeta  = lastCognitionData.meta_shards.find(ms => ms.children.includes(conceptName));
     const causes  = lastCognitionData.causal_links.filter(l => l.to   === conceptName);
     const effects = lastCognitionData.causal_links.filter(l => l.from === conceptName);
 
@@ -1427,62 +1869,120 @@ function inspectSimNode(conceptName) {
     }
 
     let html = `
-        <div style="font-size:0.75rem; line-height:1.5;">
-            <div style="font-weight:700; color:var(--a2); font-size:0.85rem; margin-bottom:8px; border-bottom:1px solid var(--bdr); padding-bottom:4px;">
-                🔍 ${conceptName.length > 50 ? conceptName.substring(0, 48) + '…' : conceptName}
+        <div style="font-size:0.75rem; line-height:1.5; color:#f3f4f6;">
+            <div style="font-weight:800; color:var(--a2); font-size:0.9rem; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                <span>🧠 DOSSIER</span>
+                <span class="pill" style="background:rgba(56,189,248,0.1); color:var(--a2); border:1px solid rgba(56,189,248,0.2); font-size:0.55rem;">NODE</span>
+            </div>
+            
+            <div style="font-size:0.8rem; font-weight:700; color:#fff; word-break:break-word; margin-bottom:10px;">
+                ${conceptName}
             </div>
     `;
 
     if (clusterName) {
         html += `
-            <div style="margin-bottom:6px;">
+            <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
                 <span class="pill" style="background:rgba(129,140,248,0.15); color:var(--a)">CLUSTER</span>
-                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db; margin-left:4px;">${clusterName}</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1; font-weight:600;">${clusterName}</span>
             </div>
         `;
     }
 
     html += `
-            <div style="margin-bottom:6px;">
-                <span class="pill" style="background:rgba(56,189,248,0.15); color:var(--a2)">3D COORD</span>
-                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">[${coords[0].toFixed(1)}, ${coords[1].toFixed(1)}, ${coords[2].toFixed(1)}]</span>
+            <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+                <span class="pill" style="background:rgba(56,189,248,0.15); color:var(--a2)">COORDS</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">X:${coords[0].toFixed(0)} Y:${coords[1].toFixed(0)} Z:${coords[2].toFixed(0)}</span>
             </div>
 
-            <div style="margin-bottom:6px;">
-                <span class="pill" style="background:rgba(16,185,129,0.15); color:#10b981;">WM</span>
-                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#d1d5db;">Activation: ${wmActivation.toFixed(3)}</span>
+            <div style="margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                <span class="pill" style="background:rgba(16,185,129,0.15); color:#10b981;">ACTIVATION</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">${wmActivation.toFixed(3)}</span>
             </div>
     `;
 
-    // Thought decomposition (main value: shows what's inside the sphere)
+    // Thought decomposition
     if (thoughts.length > 0) {
         html += `
-            <div style="margin-bottom:8px; border:1px solid rgba(56,189,248,0.2); background:rgba(56,189,248,0.04); padding:8px; border-radius:8px;">
-                <div class="lbl" style="color:var(--a2); margin-bottom:6px;">💭 Thought Decomposition (${thoughts.length})</div>
-                ${thoughts.map((t, i) => `<div style="font-size:0.65rem; color:#9ca3af; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--a);">${i+1}.</span> ${t}</div>`).join('')}
+            <div style="margin-bottom:10px; border:1px solid rgba(56,189,248,0.15); background:rgba(0,0,0,0.3); padding:10px; border-radius:8px;">
+                <div style="font-weight:700; font-size:0.65rem; color:var(--a2); margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:6px;">
+                  <span>💭</span> Thought Decomposition (${thoughts.length})
+                </div>
+                <div style="max-height:120px; overflow-y:auto; padding-right:4px;">
+                  ${thoughts.map((t, i) => `
+                    <div style="font-size:0.65rem; color:#9ca3af; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.03); line-height:1.4;">
+                      <span style="color:var(--a); font-weight:700;">${i+1}.</span> ${t}
+                    </div>
+                  `).join('')}
+                </div>
             </div>
         `;
     }
 
     if (assembly) {
         html += `
-            <div style="margin-bottom:6px; border:1px solid rgba(167,139,250,0.3); background:rgba(167,139,250,0.05); padding:6px; border-radius:6px;">
-                <span class="pill" style="background:#a78bfa; color:#000;">ATTRACTOR</span>
-                <div style="margin-top:4px; font-size:0.65rem;">strength: <b>${assembly.basin_strength.toFixed(3)}</b> · stability: <b>${assembly.stability.toFixed(3)}</b></div>
+            <div style="margin-bottom:10px; border:1px solid rgba(167,139,250,0.3); background:rgba(167,139,250,0.05); padding:8px; border-radius:8px;">
+                <span class="pill" style="background:#a78bfa; color:#020408; font-weight:800; font-size:0.55rem;">ATTRACTOR BASIN ACTIVE</span>
+                <div style="margin-top:6px; font-size:0.65rem; font-family:'JetBrains Mono'; color:#d8b4fe; display:flex; justify-content:space-between;">
+                  <span>STRENGTH: ${assembly.basin_strength.toFixed(3)}</span>
+                  <span>STABILITY: ${assembly.stability.toFixed(3)}</span>
+                </div>
             </div>
         `;
     }
 
+    // Causal matrix transitions
     if (causes.length > 0) {
-        html += `<div style="margin-top:6px;"><div class="lbl">Triggered by</div>${causes.map(c => `<div style="font-size:0.65rem; color:#9ca3af;">← <b>${c.from.substring(0,40)}</b> (w:${c.weight.toFixed(2)})</div>`).join('')}</div>`;
+        html += `
+            <div style="margin-top:8px;">
+                <div class="lbl" style="font-size:0.6rem; color:#9ca3af; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Triggered By (Input Paths)</div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  ${causes.map(c => `
+                    <div style="font-size:0.65rem; background:rgba(255,255,255,0.02); padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.04); display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="inspectSimNode(\`${c.from.replace(/'/g, "\\'")}\`)">
+                      <span style="color:#d1d5db; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">← ${c.from}</span>
+                      <span style="font-family:'JetBrains Mono'; font-size:0.55rem; color:var(--a2)">w:${c.weight.toFixed(2)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+            </div>
+        `;
     }
+    
     if (effects.length > 0) {
-        html += `<div style="margin-top:6px;"><div class="lbl">Leads to</div>${effects.map(e => `<div style="font-size:0.65rem; color:#9ca3af;">→ <b>${e.to.substring(0,40)}</b> (w:${e.weight.toFixed(2)})</div>`).join('')}</div>`;
+        html += `
+            <div style="margin-top:8px;">
+                <div class="lbl" style="font-size:0.6rem; color:#9ca3af; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Leads To (Causal Triggers)</div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  ${effects.map(e => `
+                    <div style="font-size:0.65rem; background:rgba(255,255,255,0.02); padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.04); display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="inspectSimNode(\`${e.to.replace(/'/g, "\\'")}\`)">
+                      <span style="color:#d1d5db; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:200px;">→ ${e.to}</span>
+                      <span style="font-family:'JetBrains Mono'; font-size:0.55rem; color:var(--a2)">w:${e.weight.toFixed(2)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+            </div>
+        `;
     }
 
     html += `</div>`;
     document.getElementById('neuron-inspector').innerHTML = html;
 }
+
+function switchRightTab(tab) {
+  document.getElementById('right-tab-hub').style.display = (tab === 'hub') ? 'block' : 'none';
+  document.getElementById('right-tab-mind').style.display = (tab === 'mind') ? 'block' : 'none';
+  
+  document.getElementById('tab-btn-hub').classList.toggle('active', tab === 'hub');
+  document.getElementById('tab-btn-mind').classList.toggle('active', tab === 'mind');
+}
+
+// Bind Escape key to cancel/clear selections
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    clearQueryProbe();
+    resetInspector();
+  }
+});
 
 // Fire Simulation Initialization
 document.getElementById('LD').style.display='none';

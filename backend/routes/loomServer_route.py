@@ -424,6 +424,41 @@ def save_brain_file():
         for k, v in _cognition_state.semantic_field.concept_embeddings.items():
             emb_dict[k] = v.tolist()
 
+        emb_file_path = os.path.join(COGNITION_STATE_DIR, "brain_embeddings.bin")
+        with open(emb_file_path, "wb") as f:
+            f.write(msgpack.packb(emb_dict, use_bin_type=True))
+
+        # 2. Coordinates & Velocities: raw float32 binary arrays
+        concept_keys = sorted(list(_cognition_state.concept_coords.keys()))
+        
+        coords_list = []
+        for k in concept_keys:
+            coords_list.append(_cognition_state.concept_coords[k].astype(np.float32))
+        
+        if coords_list:
+            coords_array = np.vstack(coords_list)
+            coords_bytes = coords_array.tobytes()
+        else:
+            coords_bytes = b""
+            
+        coords_file_path = os.path.join(COGNITION_STATE_DIR, "coordinates.bin")
+        with open(coords_file_path, "wb") as f:
+            f.write(coords_bytes)
+            
+        vel_list = []
+        for k in concept_keys:
+            vel_list.append(_cognition_state.concept_velocities[k].astype(np.float32))
+            
+        if vel_list:
+            vel_array = np.vstack(vel_list)
+            vel_bytes = vel_array.tobytes()
+        else:
+            vel_bytes = b""
+            
+        vel_file_path = os.path.join(COGNITION_STATE_DIR, "velocities.bin")
+        with open(vel_file_path, "wb") as f:
+            f.write(vel_bytes)
+
         # Serialize active assemblies
         assemblies = []
         for a in _cognition_state.active_assemblies:
@@ -452,6 +487,14 @@ def save_brain_file():
                 "to": v,
                 "weight": float(data.get("weight", 0.0))
             })
+            
+        wm_data = {
+            "nodes": wm_nodes,
+            "edges": wm_edges
+        }
+        wm_file_path = os.path.join(COGNITION_STATE_DIR, "working_memory.bin")
+        with open(wm_file_path, "wb") as f:
+            f.write(msgpack.packb(wm_data, use_bin_type=True))
 
         # Serialize causal links
         causal_edges = []
@@ -462,6 +505,10 @@ def save_brain_file():
                 "weight": float(data.get("weight", 0.0)),
                 "frequency": int(data.get("frequency", 1))
             })
+            
+        causal_file_path = os.path.join(COGNITION_STATE_DIR, "causal_links.bin")
+        with open(causal_file_path, "wb") as f:
+            f.write(msgpack.packb(causal_edges, use_bin_type=True))
 
         # Serialize meta shards
         meta_shards = []
@@ -476,10 +523,22 @@ def save_brain_file():
 
         # Persist concept-to-thought mapping (for click-to-expand)
         concept_thoughts = getattr(_cognition_state, '_concept_thoughts', {})
-        coords_serial = {k: v.tolist() for k, v in _cognition_state.concept_coords.items()}
-        vel_serial = {k: v.tolist() for k, v in _cognition_state.concept_velocities.items()}
+        
+        # Serialize physics tensors
+        physics_file_path = os.path.join(COGNITION_STATE_DIR, "physics_tensors.bin")
+        with open(physics_file_path, "wb") as f:
+            f.write(msgpack.packb(_cognition_state.physics_tensors, use_bin_type=True))
+            
+        # Serialize replay logs (episodic tensors) MsgPack + Zstd
+        import zstandard as zstd
+        replay_list = [v.tolist() for v in _cognition_state.episodic_tensors]
+        cctx = zstd.ZstdCompressor()
+        compressed_replay = cctx.compress(msgpack.packb(replay_list, use_bin_type=True))
+        replay_file_path = os.path.join(COGNITION_STATE_DIR, "replay.bin")
+        with open(replay_file_path, "wb") as f:
+            f.write(compressed_replay)
 
-        state_dict = {
+        metadata = {
             "tick": _cognition_state.tick,
             "entropy": _cognition_state.entropy,
             "coherence": _cognition_state.coherence,
@@ -488,140 +547,266 @@ def save_brain_file():
             "energy_budget": _cognition_state.energy_budget,
             "latent_field": _cognition_state.latent_field.tolist() if _cognition_state.latent_field is not None else None,
             "working_latent": _cognition_state.working_latent.tolist() if _cognition_state.working_latent is not None else None,
+            "concept_keys": concept_keys,
             "active_assemblies": assemblies,
-            "working_memory": {
-                "nodes": wm_nodes,
-                "edges": wm_edges
-            },
             "attention_focus": list(_cognition_state.attention_focus),
             "meta_shards": meta_shards,
-            "causal_links": causal_edges,
             "shard_groups": _shard_groups,
-            "concept_thoughts": concept_thoughts,
-            "concept_coords": coords_serial,
-            "concept_velocities": vel_serial,
-            "physics_tensors": _cognition_state.physics_tensors
+            "concept_thoughts": concept_thoughts
         }
 
-        file_path = os.path.join(COGNITION_STATE_DIR, "brain_state.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(state_dict, f, indent=4)
-
-        emb_file_path = os.path.join(COGNITION_STATE_DIR, "brain_embeddings.json")
-        with open(emb_file_path, "w", encoding="utf-8") as f:
-            json.dump(emb_dict, f, indent=4)
+        metadata_file_path = os.path.join(COGNITION_STATE_DIR, "metadata.bin")
+        with open(metadata_file_path, "wb") as f:
+            f.write(msgpack.packb(metadata, use_bin_type=True))
     except Exception as e:
         print("Error saving brain state file:", e)
 
 def load_brain_file():
     global _cognition_state, _cognition_pipeline, _cognition_controller, _shard_groups
-    file_path = os.path.join(COGNITION_STATE_DIR, "brain_state.json")
-    if not os.path.exists(file_path):
+    
+    metadata_file_path = os.path.join(COGNITION_STATE_DIR, "metadata.bin")
+    legacy_file_path = os.path.join(COGNITION_STATE_DIR, "brain_state.json")
+    
+    if not os.path.exists(metadata_file_path) and not os.path.exists(legacy_file_path):
         return False
+        
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            state_dict = json.load(f)
-
         init_cognition_engine()
-
-        _cognition_state.tick = state_dict.get("tick", 0)
-        _cognition_state.entropy = state_dict.get("entropy", 0.5)
-        _cognition_state.coherence = state_dict.get("coherence", 0.5)
-        _cognition_state.pressure = state_dict.get("pressure", 0.0)
-        _cognition_state.surprise = state_dict.get("surprise", 0.0)
-        _cognition_state.energy_budget = state_dict.get("energy_budget", 1.0)
-
-        lf = state_dict.get("latent_field")
-        if lf is not None:
-            _cognition_state.latent_field = np.array(lf)
-        wl = state_dict.get("working_latent")
-        if wl is not None:
-            _cognition_state.working_latent = np.array(wl)
-
-        # Load embeddings (separated)
+        
+        # Check if new metadata.bin exists
+        if os.path.exists(metadata_file_path):
+            with open(metadata_file_path, "rb") as f:
+                metadata = msgpack.unpackb(f.read(), raw=False)
+                
+            _cognition_state.tick = metadata.get("tick", 0)
+            _cognition_state.entropy = metadata.get("entropy", 0.5)
+            _cognition_state.coherence = metadata.get("coherence", 0.5)
+            _cognition_state.pressure = metadata.get("pressure", 0.0)
+            _cognition_state.surprise = metadata.get("surprise", 0.0)
+            _cognition_state.energy_budget = metadata.get("energy_budget", 1.0)
+            
+            lf = metadata.get("latent_field")
+            if lf is not None:
+                _cognition_state.latent_field = np.array(lf)
+            wl = metadata.get("working_latent")
+            if wl is not None:
+                _cognition_state.working_latent = np.array(wl)
+                
+            concept_keys = metadata.get("concept_keys", [])
+            _shard_groups = metadata.get("shard_groups", {})
+            _cognition_state._concept_thoughts = metadata.get("concept_thoughts", {})
+            _cognition_state.attention_focus = metadata.get("attention_focus", [])
+            
+            # Load active assemblies
+            from backend.services.loom_service.cognition.attractor_dynamics import CognitiveAssembly
+            _cognition_state.active_assemblies = []
+            for a in metadata.get("active_assemblies", []):
+                _cognition_state.active_assemblies.append(CognitiveAssembly(
+                    assembly_id=a["id"],
+                    dominant_concept=a["dominant"],
+                    node_activations=a["activations"],
+                    confidence=a["confidence"],
+                    stability=a["stability"],
+                    phase_coherence=_cognition_state.coherence,
+                    meta_data={"basin_strength": a["basin_strength"]}
+                ))
+                
+            # Load meta shards
+            from backend.services.loom_service.cognition.attractor_dynamics import MetaShard
+            _cognition_state.meta_shards.meta_store.clear()
+            for ms in metadata.get("meta_shards", []):
+                _cognition_state.meta_shards.meta_store[ms["id"]] = MetaShard(
+                    meta_id=ms["id"],
+                    children=ms["children"],
+                    field_vec=np.zeros(1),
+                    abstraction_level=ms["abstraction_level"],
+                    stability=ms["stability"],
+                    emergent_label=ms["label"]
+                )
+                
+            # Load concept coordinates from raw float32 binary
+            coords_file_path = os.path.join(COGNITION_STATE_DIR, "coordinates.bin")
+            if os.path.exists(coords_file_path) and concept_keys:
+                with open(coords_file_path, "rb") as f:
+                    coords_bytes = f.read()
+                if coords_bytes:
+                    coords_array = np.frombuffer(coords_bytes, dtype=np.float32).reshape(len(concept_keys), -1)
+                    _cognition_state.concept_coords = {k: coords_array[idx] for idx, k in enumerate(concept_keys)}
+            else:
+                _cognition_state.concept_coords = {}
+                
+            # Load concept velocities from raw float32 binary
+            vel_file_path = os.path.join(COGNITION_STATE_DIR, "velocities.bin")
+            if os.path.exists(vel_file_path) and concept_keys:
+                with open(vel_file_path, "rb") as f:
+                    vel_bytes = f.read()
+                if vel_bytes:
+                    vel_array = np.frombuffer(vel_bytes, dtype=np.float32).reshape(len(concept_keys), -1)
+                    _cognition_state.concept_velocities = {k: vel_array[idx] for idx, k in enumerate(concept_keys)}
+            else:
+                _cognition_state.concept_velocities = {}
+                
+            # Load causal links from msgpack
+            causal_file_path = os.path.join(COGNITION_STATE_DIR, "causal_links.bin")
+            _cognition_state.causal.causal_matrix.clear()
+            if os.path.exists(causal_file_path):
+                with open(causal_file_path, "rb") as f:
+                    causal_edges = msgpack.unpackb(f.read(), raw=False)
+                for l in causal_edges:
+                    _cognition_state.causal.causal_matrix.add_edge(
+                        l["from"],
+                        l["to"],
+                        weight=l["weight"],
+                        frequency=l["frequency"],
+                        last_seen=time.time()
+                    )
+                    
+            # Load working memory graph from msgpack
+            wm_file_path = os.path.join(COGNITION_STATE_DIR, "working_memory.bin")
+            _cognition_state.memory.graph.clear()
+            if os.path.exists(wm_file_path):
+                with open(wm_file_path, "rb") as f:
+                    wm_data = msgpack.unpackb(f.read(), raw=False)
+                for n in wm_data.get("nodes", []):
+                    _cognition_state.memory.graph.add_node(
+                        n["id"],
+                        activation=n["activation"],
+                        stability=n["stability"],
+                        temporal_depth=n["temporal_depth"]
+                    )
+                for e in wm_data.get("edges", []):
+                    _cognition_state.memory.graph.add_edge(
+                        e["from"],
+                        e["to"],
+                        weight=e["weight"]
+                    )
+                    
+            # Load physics tensors
+            physics_file_path = os.path.join(COGNITION_STATE_DIR, "physics_tensors.bin")
+            if os.path.exists(physics_file_path):
+                with open(physics_file_path, "rb") as f:
+                    _cognition_state.physics_tensors = msgpack.unpackb(f.read(), raw=False)
+            else:
+                _cognition_state.physics_tensors = {}
+                
+            # Load replay logs (episodic tensors) from Zstd + MsgPack
+            replay_file_path = os.path.join(COGNITION_STATE_DIR, "replay.bin")
+            _cognition_state.episodic_tensors = []
+            if os.path.exists(replay_file_path):
+                import zstandard as zstd
+                dctx = zstd.ZstdDecompressor()
+                with open(replay_file_path, "rb") as f:
+                    compressed_replay = f.read()
+                if compressed_replay:
+                    replay_list = msgpack.unpackb(dctx.decompress(compressed_replay), raw=False)
+                    _cognition_state.episodic_tensors = [np.array(v) for v in replay_list]
+                    
+        # Backward-compatible fallback to legacy brain_state.json
+        elif os.path.exists(legacy_file_path):
+            with open(legacy_file_path, "r", encoding="utf-8") as f:
+                state_dict = json.load(f)
+                
+            _cognition_state.tick = state_dict.get("tick", 0)
+            _cognition_state.entropy = state_dict.get("entropy", 0.5)
+            _cognition_state.coherence = state_dict.get("coherence", 0.5)
+            _cognition_state.pressure = state_dict.get("pressure", 0.0)
+            _cognition_state.surprise = state_dict.get("surprise", 0.0)
+            _cognition_state.energy_budget = state_dict.get("energy_budget", 1.0)
+            
+            lf = state_dict.get("latent_field")
+            if lf is not None:
+                _cognition_state.latent_field = np.array(lf)
+            wl = state_dict.get("working_latent")
+            if wl is not None:
+                _cognition_state.working_latent = np.array(wl)
+                
+            from backend.services.loom_service.cognition.attractor_dynamics import CognitiveAssembly
+            _cognition_state.active_assemblies = []
+            for a in state_dict.get("active_assemblies", []):
+                _cognition_state.active_assemblies.append(CognitiveAssembly(
+                    assembly_id=a["id"],
+                    dominant_concept=a["dominant"],
+                    node_activations=a["activations"],
+                    confidence=a["confidence"],
+                    stability=a["stability"],
+                    phase_coherence=_cognition_state.coherence,
+                    meta_data={"basin_strength": a["basin_strength"]}
+                ))
+                
+            _cognition_state.memory.graph.clear()
+            wm = state_dict.get("working_memory", {})
+            for n in wm.get("nodes", []):
+                _cognition_state.memory.graph.add_node(
+                    n["id"],
+                    activation=n["activation"],
+                    stability=n["stability"],
+                    temporal_depth=n["temporal_depth"]
+                )
+            for e in wm.get("edges", []):
+                _cognition_state.memory.graph.add_edge(
+                    e["from"],
+                    e["to"],
+                    weight=e["weight"]
+                )
+                
+            _cognition_state.causal.causal_matrix.clear()
+            for l in state_dict.get("causal_links", []):
+                _cognition_state.causal.causal_matrix.add_edge(
+                    l["from"],
+                    l["to"],
+                    weight=l["weight"],
+                    frequency=l["frequency"],
+                    last_seen=time.time()
+                )
+                
+            from backend.services.loom_service.cognition.attractor_dynamics import MetaShard
+            _cognition_state.meta_shards.meta_store.clear()
+            for ms in state_dict.get("meta_shards", []):
+                _cognition_state.meta_shards.meta_store[ms["id"]] = MetaShard(
+                    meta_id=ms["id"],
+                    children=ms["children"],
+                    field_vec=np.zeros(1),
+                    abstraction_level=ms["abstraction_level"],
+                    stability=ms["stability"],
+                    emergent_label=ms["label"]
+                )
+                
+            _cognition_state.attention_focus = state_dict.get("attention_focus", [])
+            _shard_groups = state_dict.get("shard_groups", {})
+            _cognition_state._concept_thoughts = state_dict.get("concept_thoughts", {})
+            
+            coords_dict = state_dict.get("concept_coords", {})
+            _cognition_state.concept_coords = {k: np.array(v) for k, v in coords_dict.items()}
+            
+            vel_dict = state_dict.get("concept_velocities", {})
+            _cognition_state.concept_velocities = {k: np.array(v) for k, v in vel_dict.items()}
+            
+            _cognition_state.physics_tensors = state_dict.get("physics_tensors", {})
+            
+            # Immediately save as binary state
+            save_brain_file()
+            
+        # Load concept embeddings
         _cognition_state.semantic_field.concept_embeddings.clear()
-        emb_file_path = os.path.join(COGNITION_STATE_DIR, "brain_embeddings.json")
-        if os.path.exists(emb_file_path):
-            with open(emb_file_path, "r", encoding="utf-8") as f:
+        emb_file_path_bin = os.path.join(COGNITION_STATE_DIR, "brain_embeddings.bin")
+        emb_file_path_json = os.path.join(COGNITION_STATE_DIR, "brain_embeddings.json")
+        if os.path.exists(emb_file_path_bin):
+            with open(emb_file_path_bin, "rb") as f:
+                emb_dict = msgpack.unpackb(f.read(), raw=False)
+        elif os.path.exists(emb_file_path_json):
+            with open(emb_file_path_json, "r", encoding="utf-8") as f:
                 emb_dict = json.load(f)
         else:
-            emb_dict = state_dict.get("concept_embeddings", {})
-
+            emb_dict = {}
+            
         for k, v in emb_dict.items():
             _cognition_state.semantic_field.concept_embeddings[k] = np.array(v)
-
-        # Load active assemblies
-        from backend.services.loom_service.cognition.attractor_dynamics import CognitiveAssembly
-        _cognition_state.active_assemblies = []
-        for a in state_dict.get("active_assemblies", []):
-            _cognition_state.active_assemblies.append(CognitiveAssembly(
-                assembly_id=a["id"],
-                dominant_concept=a["dominant"],
-                node_activations=a["activations"],
-                confidence=a["confidence"],
-                stability=a["stability"],
-                phase_coherence=_cognition_state.coherence,
-                meta_data={"basin_strength": a["basin_strength"]}
-            ))
-
-        # Load working memory graph
-        _cognition_state.memory.graph.clear()
-        wm = state_dict.get("working_memory", {})
-        for n in wm.get("nodes", []):
-            _cognition_state.memory.graph.add_node(
-                n["id"],
-                activation=n["activation"],
-                stability=n["stability"],
-                temporal_depth=n["temporal_depth"]
-            )
-        for e in wm.get("edges", []):
-            _cognition_state.memory.graph.add_edge(
-                e["from"],
-                e["to"],
-                weight=e["weight"]
-            )
-
-        # Load causal graph
-        _cognition_state.causal.causal_matrix.clear()
-        for l in state_dict.get("causal_links", []):
-            _cognition_state.causal.causal_matrix.add_edge(
-                l["from"],
-                l["to"],
-                weight=l["weight"],
-                frequency=l["frequency"],
-                last_seen=time.time()
-            )
-
-        # Load meta shards
-        from backend.services.loom_service.cognition.attractor_dynamics import MetaShard
-        _cognition_state.meta_shards.meta_store.clear()
-        for ms in state_dict.get("meta_shards", []):
-            _cognition_state.meta_shards.meta_store[ms["id"]] = MetaShard(
-                meta_id=ms["id"],
-                children=ms["children"],
-                field_vec=np.zeros(1),
-                abstraction_level=ms["abstraction_level"],
-                stability=ms["stability"],
-                emergent_label=ms["label"]
-            )
-
-        _cognition_state.attention_focus = state_dict.get("attention_focus", [])
-
-        # Restore shard groups and per-concept thoughts
-        _shard_groups = state_dict.get("shard_groups", {})
-        _cognition_state._concept_thoughts = state_dict.get("concept_thoughts", {})
-        
-        # Restore dynamic coordinates and physics tensors
-        coords_dict = state_dict.get("concept_coords", {})
-        _cognition_state.concept_coords = {k: np.array(v) for k, v in coords_dict.items()}
-        
-        vel_dict = state_dict.get("concept_velocities", {})
-        _cognition_state.concept_velocities = {k: np.array(v) for k, v in vel_dict.items()}
-        
-        _cognition_state.physics_tensors = state_dict.get("physics_tensors", {})
+            
         return True
     except Exception as e:
         print("Failed to load brain state file:", e)
+        import traceback
+        traceback.print_exc()
         return False
 
 @router.post("/api/cognition/init")
@@ -637,12 +822,12 @@ async def init_cognition_state_route():
 @router.post("/api/cognition/reset")
 async def reset_cognition_state_route():
     try:
-        file_path = os.path.join(COGNITION_STATE_DIR, "brain_state.json")
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        emb_file_path = os.path.join(COGNITION_STATE_DIR, "brain_embeddings.json")
-        if os.path.exists(emb_file_path):
-            os.remove(emb_file_path)
+        # Delete all files in COGNITION_STATE_DIR to clear all state variables
+        for filename in os.listdir(COGNITION_STATE_DIR):
+            file_path = os.path.join(COGNITION_STATE_DIR, filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                
         init_cognition_engine()
         save_brain_file()
         return {"success": True, "status": "Cognitive Substrate Reset & Cleared."}
@@ -1577,6 +1762,36 @@ async def query_cognition_memory(request: CognitionQueryRequest):
         results.sort(key=lambda x: x["score"], reverse=True)
         top_matches = results[:request.top_k]
         
+        # Excite the brain state: recall boosts activation/energy and reinforces traversed causal paths
+        for match in top_matches:
+            concept = match["concept"]
+            score = match["score"]
+            
+            # Boost activation in physics tensors
+            if concept in _cognition_state.physics_tensors:
+                tensors = _cognition_state.physics_tensors[concept]
+                tensors["activation"] = min(1.0, tensors.get("activation", 0.5) + score * 0.20)
+                tensors["energy"] = min(1.0, tensors.get("energy", 0.5) + score * 0.15)
+                tensors["stability"] = min(1.0, tensors.get("stability", 0.5) + 0.05)
+                
+            # Boost in working memory if present
+            if _cognition_state.memory.graph.has_node(concept):
+                _cognition_state.memory.graph.nodes[concept]["activation"] = min(
+                    1.0, _cognition_state.memory.graph.nodes[concept]["activation"] + score * 0.20
+                )
+                
+            # Strengthen causal paths traversed during propagation
+            path = match["path"]
+            if len(path) > 1:
+                for i in range(len(path) - 1):
+                    u, v = path[i], path[i+1]
+                    if _cognition_state.causal.causal_matrix.has_edge(u, v):
+                        edge_data = _cognition_state.causal.causal_matrix[u][v]
+                        edge_data["weight"] = min(1.0, edge_data.get("weight", 0.5) + 0.06)
+                        edge_data["frequency"] = edge_data.get("frequency", 1) + 1
+                        
+        save_brain_file()
+        
         # Project query vector to 3D space using saved PCA parameters
         q_proj_3d = [0.0, 0.0, 0.0]
         pca_mean = getattr(_cognition_state, "_pca_mean", None)
@@ -1704,6 +1919,7 @@ async def get_cognition_state():
             "causal_links": causal_links,
             "shard_groups": _shard_groups,
             "concept_thoughts": getattr(_cognition_state, '_concept_thoughts', {}),
+            "physics_tensors": _cognition_state.physics_tensors,
             "pipeline": {
                 "status": "idle",
                 "reason": None,
@@ -1843,6 +2059,7 @@ async def tick_cognition_state(request: CognitionTickRequest):
             "causal_links": causal_links,
             "shard_groups": _shard_groups,
             "concept_thoughts": getattr(_cognition_state, '_concept_thoughts', {}),
+            "physics_tensors": _cognition_state.physics_tensors,
             "pipeline": {
                 "status": pipeline_result["status"],
                 "reason": pipeline_result.get("reason"),

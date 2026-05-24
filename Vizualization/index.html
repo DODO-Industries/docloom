@@ -679,6 +679,9 @@ let hoveredConcept = null;
 let lastAddedConcept = null; // for the pulse effect on new entries
 let lastSpawnAnchor = null;  // parent node for physics attraction spawning
 
+const expandedMetaShards = new Set();
+const expandedClusters = new Set();
+
 // Dynamic sphere radius based on how many nodes exist
 function getNodeRadius() {
   const n = Object.keys(simConcepts).length + 1;
@@ -734,6 +737,8 @@ function clear3DSubstrate() {
   queryProbeLines = [];
   highlightedConcepts = [];
   lastAddedConcept = null;
+  expandedMetaShards.clear();
+  expandedClusters.clear();
   document.getElementById('labels-container').innerHTML = '';
   conceptLabelDivs = {};
 }
@@ -952,6 +957,34 @@ async function queryMemory() {
     if (!d.success || d.matches.length === 0) {
       alert("No matching memories found.");
       return;
+    }
+
+    // Auto-expand meta-shards and clusters that contain search matches
+    if (lastCognitionData) {
+      let expandedAny = false;
+      d.matches.forEach(match => {
+        // Auto-expand meta shard
+        if (lastCognitionData.meta_shards) {
+          lastCognitionData.meta_shards.forEach(meta => {
+            if (meta.children.includes(match.concept) && !expandedMetaShards.has(meta.id)) {
+              expandedMetaShards.add(meta.id);
+              expandedAny = true;
+            }
+          });
+        }
+        // Auto-expand cluster group
+        const shardGroups = lastCognitionData.shard_groups || {};
+        for (const [clusterKey, members] of Object.entries(shardGroups)) {
+          if (members.includes(match.concept) && !expandedClusters.has(clusterKey)) {
+            expandedClusters.add(clusterKey);
+            expandedAny = true;
+          }
+        }
+      });
+      
+      if (expandedAny) {
+        renderSubstrate3D(lastCognitionData);
+      }
     }
     
     // Create glowing magenta query probe at projected 3D coordinates
@@ -1283,6 +1316,15 @@ function renderSubstrate3D(d) {
     members.forEach(c => conceptCluster[c] = k);
   }
 
+  // Map concept to meta shard IDs
+  const conceptMetaShards = {};
+  d.meta_shards.forEach(meta => {
+    meta.children.forEach(c => {
+      if (!conceptMetaShards[c]) conceptMetaShards[c] = [];
+      conceptMetaShards[c].push(meta.id);
+    });
+  });
+
   const r = getNodeRadius();
 
   for (let concept in currentConcepts) {
@@ -1293,41 +1335,60 @@ function renderSubstrate3D(d) {
     const isAttention = d.attention_focus.includes(concept);
     const isNew       = (concept === lastAddedConcept);
 
+    const metaIds = conceptMetaShards[concept];
+    let isVisible = true;
+    if (metaIds && metaIds.length > 0) {
+      isVisible = metaIds.some(id => expandedMetaShards.has(id));
+    } else if (clusterKey) {
+      isVisible = expandedClusters.has(clusterKey);
+    }
+
     let mesh = simConcepts[concept];
+    if (!isVisible) {
+      if (mesh) {
+        mesh.visible = false;
+      }
+      continue;
+    }
+
     if (!mesh) {
       const mat = new THREE.MeshPhongMaterial({
         color: isAttention ? 0xfbbf24 : baseColor,
         emissive: isAttention ? 0xfbbf24 : baseColor,
-        emissiveIntensity: isNew ? 3.0 : 0.8,
+        emissiveIntensity: 3.0,
         transparent: true,
         opacity: 0.92
       });
       mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 18), mat);
       
-      // Spawn at parent concept's position if new, else spawn directly at target coordinates
-      if (isNew) {
-        if (lastSpawnAnchor && simConcepts[lastSpawnAnchor]) {
-          mesh.position.copy(simConcepts[lastSpawnAnchor].position);
-        } else {
-          mesh.position.set(0, 0, 0);
-        }
+      // Spawn at parent concept's position if new, else spawn near center with a tiny jitter to drift out
+      if (lastSpawnAnchor && simConcepts[lastSpawnAnchor]) {
+        mesh.position.copy(simConcepts[lastSpawnAnchor].position);
       } else {
-        mesh.position.copy(posVec);
+        mesh.position.set(
+          (Math.random() - 0.5) * 50,
+          (Math.random() - 0.5) * 50,
+          (Math.random() - 0.5) * 50
+        );
       }
       
       mesh.userData.targetPos = posVec;
-      mesh.userData.isNew = isNew;
-      mesh.userData.newPulseStart = isNew ? Date.now() : null;
+      mesh.userData.isNew = true;
+      mesh.userData.newPulseStart = Date.now();
       mesh.userData.conceptThoughts = conceptThoughts[concept] || [];
+      mesh.visible = true;
       simGroup.add(mesh);
       simConcepts[concept] = mesh;
     } else {
+      mesh.visible = true;
       mesh.userData.targetPos = posVec;
       mesh.userData.conceptThoughts = conceptThoughts[concept] || [];
-      // Update colour for attention
-      mesh.material.color.set(isAttention ? 0xfbbf24 : baseColor);
-      mesh.material.emissive.set(isAttention ? 0xfbbf24 : baseColor);
-      mesh.material.emissiveIntensity = isAttention ? 2.0 : (isNew ? 3.0 : 0.8);
+      // Update colour/emissive for attention, only if not currently pulsing
+      if (!mesh.userData.newPulseStart) {
+        mesh.material.color.set(isAttention ? 0xfbbf24 : baseColor);
+        mesh.material.emissive.set(isAttention ? 0xfbbf24 : baseColor);
+        mesh.material.emissiveIntensity = isAttention ? 2.0 : 0.8;
+      }
     }
 
     // Overlay label (hidden by default, shown on click/hover)
@@ -1358,7 +1419,7 @@ function renderSubstrate3D(d) {
   d.causal_links.forEach(link => {
     const fromMesh = simConcepts[link.from];
     const toMesh   = simConcepts[link.to];
-    if (fromMesh && toMesh) {
+    if (fromMesh && toMesh && fromMesh.visible && toMesh.visible) {
       const geo = new THREE.BufferGeometry().setFromPoints([fromMesh.position, toMesh.position]);
       
       // Highlight new synapses (causal links) connected to/from the newly entered thought
@@ -1385,26 +1446,30 @@ function renderSubstrate3D(d) {
     let cx = 0, cy = 0, cz = 0, cnt = 0;
     let maxDist = 0;
     members.forEach(c => {
-      const m = simConcepts[c];
-      if (!m) return;
-      cx += m.position.x; cy += m.position.y; cz += m.position.z; cnt++;
+      // Calculate centroid based on all members (even if currently hidden, to keep centroid stable)
+      // Wait, is it better to use coordinates from currentConcepts to avoid depending on whether the mesh is currently created?
+      // Yes! currentConcepts has the stable coordinates!
+      const coords = currentConcepts[c];
+      if (!coords) return;
+      cx += coords[0]; cy += coords[1]; cz += coords[2]; cnt++;
     });
     if (cnt === 0) continue;
     cx /= cnt; cy /= cnt; cz /= cnt;
     members.forEach(c => {
-      const m = simConcepts[c];
-      if (!m) return;
-      const d2 = m.position.distanceTo(new THREE.Vector3(cx, cy, cz));
+      const coords = currentConcepts[c];
+      if (!coords) return;
+      const d2 = new THREE.Vector3(coords[0], coords[1], coords[2]).distanceTo(new THREE.Vector3(cx, cy, cz));
       if (d2 > maxDist) maxDist = d2;
     });
     const haloRadius = maxDist + r * 2.5;
     const haloGeo = new THREE.SphereGeometry(haloRadius, 24, 24);
     const col = clusterColors[clusterKey] || new THREE.Color(0x818cf8);
+    const isExpanded = expandedClusters.has(clusterKey);
     const haloMat = new THREE.MeshBasicMaterial({
       color: col,
       wireframe: true,
       transparent: true,
-      opacity: 0.07
+      opacity: isExpanded ? 0.08 : 0.03
     });
     const halo = new THREE.Mesh(haloGeo, haloMat);
     halo.position.set(cx, cy, cz);
@@ -1415,17 +1480,26 @@ function renderSubstrate3D(d) {
     // Floating cluster label at the centroid top
     const cLabel = document.createElement('div');
     cLabel.className = 'cluster-label';
-    cLabel.textContent = clusterKey.replace('Cluster_', 'C-');
+    cLabel.textContent = (isExpanded ? '▼ ' : '▶ ') + clusterKey.replace('Cluster_', 'C-');
     cLabel.style.position = 'absolute';
     cLabel.style.color = `hsl(${(clusterKeys.indexOf(clusterKey) / Math.max(clusterKeys.length,1))*360},70%,70%)`;
     cLabel.style.fontSize = '0.55rem';
     cLabel.style.fontWeight = '700';
     cLabel.style.letterSpacing = '2px';
     cLabel.style.textTransform = 'uppercase';
-    cLabel.style.pointerEvents = 'none';
+    cLabel.style.pointerEvents = 'auto';
+    cLabel.style.cursor = 'pointer';
     cLabel.style.textShadow = '0 0 8px currentColor';
+    cLabel.style.background = isExpanded ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.15)';
+    cLabel.style.padding = '2px 6px';
+    cLabel.style.borderRadius = '4px';
+    cLabel.style.border = '1px solid rgba(255,255,255,0.08)';
     cLabel.style.display = 'none';
     cLabel.dataset.cx = cx; cLabel.dataset.cy = cy + haloRadius; cLabel.dataset.cz = cz;
+    cLabel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleClusterExpansion(clusterKey);
+    });
     document.getElementById('labels-container').appendChild(cLabel);
     conceptLabelDivs[`__cluster__${clusterKey}`] = {
       label: cLabel,
@@ -1476,6 +1550,7 @@ function renderSubstrate3D(d) {
   for (let metaId in currentMetaShards) {
     const item = currentMetaShards[metaId];
     let crystal = simMetaShards[metaId];
+    const isExpanded = expandedMetaShards.has(metaId);
     if (!crystal) {
       const col = new THREE.Color(0xfbbf24);
       const mat = new THREE.MeshPhongMaterial({
@@ -1493,14 +1568,26 @@ function renderSubstrate3D(d) {
       crystal.position.copy(item.pos);
     }
     
+    // Scale and glow based on expansion
+    crystal.scale.set(isExpanded ? 1.4 : 0.9, isExpanded ? 1.4 : 0.9, isExpanded ? 1.4 : 0.9);
+    crystal.material.emissiveIntensity = isExpanded ? 1.8 : 0.7;
+    
     // Add floating label for meta-shard that is always displayed
     const cleanLabel = item.meta.label.replace('Abstraction[', '').replace(']', '');
+    const shortLabel = cleanLabel.length > 25 ? cleanLabel.substring(0, 22) + '...' : cleanLabel;
     const metaLabel = document.createElement('div');
     metaLabel.className = 'node-label';
     metaLabel.style.display = 'block';
-    metaLabel.style.borderColor = 'rgba(245, 158, 11, 0.6)';
+    metaLabel.style.borderColor = isExpanded ? '#fbbf24' : 'rgba(245, 158, 11, 0.4)';
+    metaLabel.style.background = isExpanded ? 'rgba(245, 158, 11, 0.15)' : 'rgba(3, 5, 12, 0.85)';
     metaLabel.style.color = '#fbbf24';
-    metaLabel.textContent = `🔶 ${cleanLabel}`;
+    metaLabel.style.cursor = 'pointer';
+    metaLabel.style.pointerEvents = 'auto';
+    metaLabel.textContent = `${isExpanded ? '▼' : '▶'} 🔶 ${shortLabel}`;
+    metaLabel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMetaShardExpansion(metaId);
+    });
     document.getElementById('labels-container').appendChild(metaLabel);
     
     conceptLabelDivs[`__meta__${metaId}`] = {
@@ -1523,10 +1610,11 @@ function renderSubstrate3D(d) {
   for (let metaId in currentMetaShards) {
     const item = currentMetaShards[metaId];
     const crystal = simMetaShards[metaId];
-    if (crystal) {
+    const isExpanded = expandedMetaShards.has(metaId);
+    if (crystal && isExpanded) {
       item.meta.children.forEach(childName => {
         const childMesh = simConcepts[childName];
-        if (childMesh) {
+        if (childMesh && childMesh.visible) {
           const geo = new THREE.BufferGeometry().setFromPoints([crystal.position, childMesh.position]);
           const lineMat = new THREE.LineDashedMaterial({
             color: 0xfbbf24,
@@ -1588,8 +1676,16 @@ function updateHUDLabels() {
   for (let key in conceptLabelDivs) {
     const item = conceptLabelDivs[key];
 
-    // Cluster labels: always shown but dim unless hovering
+    // Cluster labels: shown if expanded or hovered
     if (item.isCluster) {
+      const clusterKey = key.replace('__cluster__', '');
+      const isExpanded = expandedClusters.has(clusterKey);
+      const isHovered = (hoveredConcept === key);
+      
+      if (!isExpanded && !isHovered) {
+        item.label.style.display = 'none';
+        continue;
+      }
       const pos = item.pos.clone();
       pos.project(camera);
       if (pos.z > 1) { item.label.style.display = 'none'; continue; }
@@ -1601,8 +1697,16 @@ function updateHUDLabels() {
       continue;
     }
 
-    // Meta shard labels: always shown
+    // Meta shard labels: shown if expanded or hovered
     if (key.startsWith('__meta__')) {
+      const metaId = key.replace('__meta__', '');
+      const isExpanded = expandedMetaShards.has(metaId);
+      const isHovered = (hoveredConcept === key);
+      
+      if (!isExpanded && !isHovered) {
+        item.label.style.display = 'none';
+        continue;
+      }
       const pos = item.pos.clone();
       pos.project(camera);
       if (pos.z > 1) { item.label.style.display = 'none'; continue; }
@@ -1611,6 +1715,12 @@ function updateHUDLabels() {
       item.label.style.display = 'block';
       item.label.style.left = `${x}px`;
       item.label.style.top  = `${y - 20}px`;
+      continue;
+    }
+
+    const mesh = simConcepts[key];
+    if (mesh && !mesh.visible) {
+      item.label.style.display = 'none';
       continue;
     }
 
@@ -1784,18 +1894,71 @@ container.addEventListener('click', (e) => {
     mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
     
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(Object.values(simConcepts));
     
-    if (intersects.length > 0) {
-        const clickedMesh = intersects[0].object;
+    // Intersect visible concept meshes
+    const visibleConcepts = Object.values(simConcepts).filter(mesh => mesh.visible);
+    const intersectsConcepts = raycaster.intersectObjects(visibleConcepts);
+    if (intersectsConcepts.length > 0) {
+        const clickedMesh = intersectsConcepts[0].object;
         const conceptName = Object.keys(simConcepts).find(key => simConcepts[key] === clickedMesh);
         if (conceptName) {
             inspectSimNode(conceptName);
+            return;
         }
-    } else {
-        resetInspector();
     }
+    
+    // Intersect Meta-Shard crystal cones
+    const intersectsMeta = raycaster.intersectObjects(Object.values(simMetaShards));
+    if (intersectsMeta.length > 0) {
+        const clickedMesh = intersectsMeta[0].object;
+        const metaId = Object.keys(simMetaShards).find(key => simMetaShards[key] === clickedMesh);
+        if (metaId) {
+            toggleMetaShardExpansion(metaId);
+            if (tip) tip.style.display = 'none';
+            return;
+        }
+    }
+
+    // Intersect Cluster halos
+    const intersectsClusters = raycaster.intersectObjects(clusterRings);
+    if (intersectsClusters.length > 0) {
+        const clickedMesh = intersectsClusters[0].object;
+        if (clickedMesh.userData && clickedMesh.userData.clusterKey) {
+            const clusterKey = clickedMesh.userData.clusterKey;
+            // Giant cluster halo clicks should only expand collapsed clusters.
+            // Collapsing should only be done via the HTML labels when expanded.
+            if (!expandedClusters.has(clusterKey)) {
+                toggleClusterExpansion(clusterKey);
+                if (tip) tip.style.display = 'none';
+                return;
+            }
+        }
+    }
+    
+    resetInspector();
 });
+
+function toggleMetaShardExpansion(metaId) {
+    if (expandedMetaShards.has(metaId)) {
+        expandedMetaShards.delete(metaId);
+    } else {
+        expandedMetaShards.add(metaId);
+    }
+    if (lastCognitionData) {
+        renderSubstrate3D(lastCognitionData);
+    }
+}
+
+function toggleClusterExpansion(clusterKey) {
+    if (expandedClusters.has(clusterKey)) {
+        expandedClusters.delete(clusterKey);
+    } else {
+        expandedClusters.add(clusterKey);
+    }
+    if (lastCognitionData) {
+        renderSubstrate3D(lastCognitionData);
+    }
+}
 
 function resetInspector() {
     if (lastCognitionData) {
@@ -1817,10 +1980,12 @@ container.addEventListener('mousemove', (e) => {
     mouse.y = -((e.clientY - rect.top) / container.clientHeight) * 2 + 1;
     
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(Object.values(simConcepts));
     
-    if (intersects.length > 0) {
-        const clickedMesh = intersects[0].object;
+    // Check visible concept nodes first
+    const visibleConcepts = Object.values(simConcepts).filter(mesh => mesh.visible);
+    const intersectsConcepts = raycaster.intersectObjects(visibleConcepts);
+    if (intersectsConcepts.length > 0) {
+        const clickedMesh = intersectsConcepts[0].object;
         const conceptName = Object.keys(simConcepts).find(key => simConcepts[key] === clickedMesh);
         
         hoveredConcept = conceptName;
@@ -1829,11 +1994,45 @@ container.addEventListener('mousemove', (e) => {
         tip.style.left = (e.clientX + 20) + 'px';
         tip.style.top = (e.clientY + 10) + 'px';
         tip.innerHTML = `<b style="color:var(--a2);text-transform:uppercase;font-size:0.6rem;letter-spacing:1px">Concept Shard</b><div style="margin-top:6px;line-height:1.5">${conceptName}</div>`;
-    } else {
-        hoveredConcept = null;
-        container.style.cursor = 'crosshair';
-        tip.style.display = 'none';
+        return;
     }
+
+    // Check Meta-Shards
+    const intersectsMeta = raycaster.intersectObjects(Object.values(simMetaShards));
+    if (intersectsMeta.length > 0) {
+        const clickedMesh = intersectsMeta[0].object;
+        const metaId = Object.keys(simMetaShards).find(key => simMetaShards[key] === clickedMesh);
+        if (metaId && lastCognitionData) {
+            const metaObj = lastCognitionData.meta_shards.find(m => m.id === metaId);
+            const cleanLabel = metaObj ? metaObj.label.replace('Abstraction[', '').replace(']', '') : metaId;
+            hoveredConcept = null;
+            container.style.cursor = 'pointer';
+            tip.style.display = 'block';
+            tip.style.left = (e.clientX + 20) + 'px';
+            tip.style.top = (e.clientY + 10) + 'px';
+            tip.innerHTML = `<b style="color:#fbbf24;text-transform:uppercase;font-size:0.6rem;letter-spacing:1px">Meta-Shard</b><div style="margin-top:6px;line-height:1.5">🔶 ${cleanLabel} (Click to toggle expand)</div>`;
+            return;
+        }
+    }
+
+    // Check Cluster Halos
+    const intersectsClusters = raycaster.intersectObjects(clusterRings);
+    if (intersectsClusters.length > 0) {
+        const clickedMesh = intersectsClusters[0].object;
+        if (clickedMesh.userData && clickedMesh.userData.clusterKey) {
+            hoveredConcept = null;
+            container.style.cursor = 'pointer';
+            tip.style.display = 'block';
+            tip.style.left = (e.clientX + 20) + 'px';
+            tip.style.top = (e.clientY + 10) + 'px';
+            tip.innerHTML = `<b style="color:#818cf8;text-transform:uppercase;font-size:0.6rem;letter-spacing:1px">Cluster Group</b><div style="margin-top:6px;line-height:1.5">${clickedMesh.userData.clusterKey.replace('Cluster_', 'C-')} (Click to toggle expand)</div>`;
+            return;
+        }
+    }
+
+    hoveredConcept = null;
+    container.style.cursor = 'crosshair';
+    tip.style.display = 'none';
 });
 
 function inspectSimNode(conceptName) {
@@ -1856,6 +2055,12 @@ function inspectSimNode(conceptName) {
     const assembly    = lastCognitionData.active_assemblies.find(a => a.dominant === conceptName);
     const causes  = lastCognitionData.causal_links.filter(l => l.to   === conceptName);
     const effects = lastCognitionData.causal_links.filter(l => l.from === conceptName);
+
+    // Get dynamic physics state tensors from response payload
+    const pTensors = (lastCognitionData.physics_tensors && lastCognitionData.physics_tensors[conceptName]) || {};
+    const conceptActivation = pTensors.activation !== undefined ? pTensors.activation : wmActivation;
+    const conceptEnergy = pTensors.energy !== undefined ? pTensors.energy : 0.0;
+    const conceptStability = pTensors.stability !== undefined ? pTensors.stability : 0.0;
 
     // Get thoughts from mesh userData (populated during renderSubstrate3D)
     const mesh = simConcepts[conceptName];
@@ -1895,9 +2100,19 @@ function inspectSimNode(conceptName) {
                 <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">X:${coords[0].toFixed(0)} Y:${coords[1].toFixed(0)} Z:${coords[2].toFixed(0)}</span>
             </div>
 
-            <div style="margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+            <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
                 <span class="pill" style="background:rgba(16,185,129,0.15); color:#10b981;">ACTIVATION</span>
-                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">${wmActivation.toFixed(3)}</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">${conceptActivation.toFixed(3)}</span>
+            </div>
+
+            <div style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+                <span class="pill" style="background:rgba(239,68,68,0.15); color:#ef4444;">ENERGY</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">${conceptEnergy.toFixed(3)}</span>
+            </div>
+
+            <div style="margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                <span class="pill" style="background:rgba(245,158,11,0.15); color:#f59e0b;">STABILITY</span>
+                <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:#cbd5e1;">${conceptStability.toFixed(3)}</span>
             </div>
     `;
 

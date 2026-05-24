@@ -49,8 +49,11 @@ class WorkingMemory:
             self.graph.add_node(nid, activation=assembly.confidence, stability=assembly.stability, temporal_depth=0)
             
         if self.last_inserted_id and self.last_inserted_id != nid:
-            weight = (assembly.confidence + self.graph.nodes[self.last_inserted_id]['activation']) / 2
-            self.graph.add_edge(self.last_inserted_id, nid, weight=weight)
+            if self.graph.has_node(self.last_inserted_id):
+                weight = (assembly.confidence + self.graph.nodes[self.last_inserted_id]['activation']) / 2
+                self.graph.add_edge(self.last_inserted_id, nid, weight=weight)
+            else:
+                self.last_inserted_id = None
         
         self.last_inserted_id = nid
         self._enforce_capacity()

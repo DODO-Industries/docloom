@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from backend.services.loom_service.substrate.neural_viewer import NeuralViewer
+from backend.services.loom_service.cortex.neural_viewer import NeuralViewer
 from backend.services.loom_service.orchestration.loomServer_Service import LoomServerService
 from backend.services.LLM_service.model_Factory import ModelFactory
 from backend.config.envConfig import setup_logger, log_service

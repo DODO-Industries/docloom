@@ -29,6 +29,10 @@ GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 GENAI_URL = os.getenv("GENAI_URL")
 GENAI_MODEL = os.getenv("GENAI_MODEL")
 
+# Universe Master Seed Key
+MASTER_SEED = int(os.getenv("MASTER_SEED", "42"))
+
+
 def setup_logger(name):
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))

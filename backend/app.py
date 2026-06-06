@@ -13,6 +13,7 @@ if PROJECT_ROOT not in sys.path:
 
 from backend.routes.loomServer_route import router as loom_router
 from backend.routes.AIServer_route import router as ai_router
+from backend.routes.embedding_route import router as embedding_router
 from backend.config.envConfig import setup_logger, log_service
 
 logger = setup_logger("DocLoomApp")
@@ -42,6 +43,7 @@ app.add_middleware(
 # Mount Routes
 app.include_router(loom_router)
 app.include_router(ai_router)
+app.include_router(embedding_router)
 
 # Static Files for Visualizer
 LIBS_DIR = os.path.abspath(os.path.join(BASE_DIR, "utils", "webVisualizer", "libs"))

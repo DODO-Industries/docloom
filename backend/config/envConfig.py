@@ -32,6 +32,9 @@ GENAI_MODEL = os.getenv("GENAI_MODEL")
 # Universe Master Seed Key
 MASTER_SEED = int(os.getenv("MASTER_SEED", "42"))
 
+# Embedding Service Configuration
+EMBEDDING_API_URL = os.getenv("EMBEDDING_API_URL", "http://localhost:8000/embed")
+
 
 def setup_logger(name):
     logger = logging.getLogger(name)

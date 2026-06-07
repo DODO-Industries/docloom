@@ -12,23 +12,7 @@ def cosine_similarity_vec(v1, v2):
     if norm1 == 0 or norm2 == 0: return 0.0
     return dot / (norm1 * norm2)
 
-# Lazy embedding model loader
-_embedding_model_cache = None
-
-def get_embedding_model():
-    global _embedding_model_cache
-    if _embedding_model_cache is None:
-        try:
-            from sentence_transformers import SentenceTransformer
-            _embedding_model_cache = SentenceTransformer('all-MiniLM-L6-v2')
-        except ImportError:
-            class DummyEmbeddingModel:
-                def encode(self, text):
-                    rng = np.random.RandomState(sum(ord(c) for c in text))
-                    v = rng.randn(384) # Default matching MiniLM
-                    return v / np.linalg.norm(v)
-            _embedding_model_cache = DummyEmbeddingModel()
-    return _embedding_model_cache
+from backend.services.loom_service.cortex.embedding.embedding_manager import get_embedding_model
 
 def safe_normalize(vec: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(vec)

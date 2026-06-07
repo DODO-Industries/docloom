@@ -2,10 +2,11 @@ import numpy as np
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from .attractor_dynamics import CognitiveAssembly, SemanticFieldEngine, MetaShards, AssemblyCompilation, safe_normalize
-from .cognitive_workspace import AttentionDynamics, WorkingMemory
-from .predictive_world_model import PredictiveProcessingEngine, CausalGraphs
-from .metacognition import Reflection
+from .attractor_basin_compilation import CognitiveAssembly, SemanticFieldEngine, MetaShards, AssemblyCompilation, safe_normalize
+from .workspace_attention_control import AttentionDynamics, WorkingMemory
+from .predictive_processing import PredictiveProcessingEngine, CausalGraphs
+from .metacognitive_reflection import Reflection
+from backend.config.tunningManagment import tuning_manager
 
 @dataclass
 class LoomShard:
@@ -177,7 +178,8 @@ class GlobalCognitiveState:
         
         # Apply Intent Pressure (Vector Field Bias)
         if self.intent.global_bias is not None:
-            input_tensor = input_tensor + (self.intent.global_bias * 0.5)
+            intent_bias_factor = tuning_manager.get_float("INTENT_BIAS_FACTOR", 0.5)
+            input_tensor = input_tensor + (self.intent.global_bias * intent_bias_factor)
             inorm = np.linalg.norm(input_tensor)
             if inorm > 0: input_tensor /= inorm
             
@@ -191,10 +193,14 @@ class GlobalCognitiveState:
         synchronization_force = self.working_latent - prev_latent
         
         # Hopfield-like competitive inhibition (destructively interferes with non-aligned states)
-        inhibition_tensor = self.working_latent * 0.15
+        inhibition_factor = tuning_manager.get_float("INHIBITION_FACTOR", 0.15)
+        inhibition_tensor = self.working_latent * inhibition_factor
         
         # Second-order physics: Mass-Spring-Damper system with semantic driving force
-        self.latent_velocity = (0.8 * self.latent_velocity) + (input_tensor * 0.4) + (synchronization_force * 0.2) - inhibition_tensor
+        velocity_drag = tuning_manager.get_float("VELOCITY_DRAG", 0.8)
+        input_force_gain = tuning_manager.get_float("INPUT_FORCE_GAIN", 0.4)
+        sync_force_gain = tuning_manager.get_float("SYNC_FORCE_GAIN", 0.2)
+        self.latent_velocity = (velocity_drag * self.latent_velocity) + (input_tensor * input_force_gain) + (synchronization_force * sync_force_gain) - inhibition_tensor
         
         # Field Position Update
         new_latent = prev_latent + self.latent_velocity
@@ -203,7 +209,8 @@ class GlobalCognitiveState:
         else: self.latent_field = new_latent
         
         # Stable Attractor Manifold (Working Memory) follows via exponential moving average
-        self.working_latent = 0.9 * self.working_latent + 0.1 * self.latent_field
+        wm_ema_alpha = tuning_manager.get_float("WM_EMA_ALPHA", 0.1)
+        self.working_latent = (1.0 - wm_ema_alpha) * self.working_latent + wm_ema_alpha * self.latent_field
         wnorm = np.linalg.norm(self.working_latent)
         if wnorm > 0: self.working_latent /= wnorm
         
@@ -233,17 +240,20 @@ class GlobalCognitiveState:
                 
                 # Semantic repulsion to prevent clumping
                 f_repulsion = np.zeros_like(pos)
+                repulsion_radius = tuning_manager.get_float("REPULSION_RADIUS", 0.2)
+                repulsion_constant = tuning_manager.get_float("REPULSION_CONSTANT", 0.02)
                 for other, other_pos in self.concept_coords.items():
                     if other == c: continue
                     diff = pos - other_pos
                     dist = np.linalg.norm(diff)
-                    if dist < 0.2:
-                        f_repulsion += (diff / (dist + 1e-5)) * 0.02
+                    if dist < repulsion_radius:
+                        f_repulsion += (diff / (dist + 1e-5)) * repulsion_constant
                         
                 f_total = f_latent + f_causal + f_repulsion
                 
                 # Momentum & Velocity Update
-                vel = vel * 0.7 + f_total * dt
+                drag_friction = tuning_manager.get_float("DRAG_FRICTION", 0.7)
+                vel = vel * drag_friction + f_total * dt
                 self.concept_velocities[c] = vel
                 
                 # Update position & project on unit hypersphere

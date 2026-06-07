@@ -1,7 +1,8 @@
 import numpy as np
 import networkx as nx
 from typing import List, Dict, Any, Optional
-from .attractor_dynamics import CognitiveAssembly
+from .attractor_basin_compilation import CognitiveAssembly
+from backend.config.tunningManagment import tuning_manager
 
 class AttentionDynamics:
     """COGNITIVE SPOTLIGHT: Prioritizes concepts."""
@@ -14,9 +15,12 @@ class AttentionDynamics:
         
     def compute_attention(self, activations: Dict[str, float], goals: List[str], prediction_error: float) -> List[str]:
         new_salience = {}
+        spotlight_gain = tuning_manager.get_float("SPOTLIGHT_GAIN", self.gain_rate)
+        spotlight_inertia = tuning_manager.get_float("SPOTLIGHT_INERTIA", self.inertia)
+        goal_boost = tuning_manager.get_float("GOAL_ATTENTION_BOOST", 1.5)
         for nid, val in activations.items():
             prev_s = self.salience_map.get(nid, 0.0) * self.decay_rate
-            score = (val * self.gain_rate + prev_s * self.inertia) * (1.0 + prediction_error) * (1.5 if nid in goals else 1.0)
+            score = (val * spotlight_gain + prev_s * spotlight_inertia) * (1.0 + prediction_error) * (goal_boost if nid in goals else 1.0)
             new_salience[nid] = score
         
         if new_salience:
@@ -82,7 +86,8 @@ class WorkingMemory:
         active = self.get_active_context()
         if not active: return
         strongest = active[0]
-        self.graph.nodes[strongest]['activation'] = min(1.0, self.graph.nodes[strongest]['activation'] * 1.2)
+        rehearsal_boost = tuning_manager.get_float("REHEARSAL_BOOST", 1.2)
+        self.graph.nodes[strongest]['activation'] = min(1.0, self.graph.nodes[strongest]['activation'] * rehearsal_boost)
         
         # ISSUE 15: True Rehearsal (Re-run prediction / compression)
         if global_state and hasattr(global_state, 'causal'):
@@ -97,6 +102,10 @@ class WorkingMemory:
         if len(self.graph.nodes) < 2: return
         to_merge = []
         nodes = list(self.graph.nodes(data=True))
+        compression_threshold = tuning_manager.get_float("COMPRESSION_THRESHOLD", threshold)
+        w_struct = tuning_manager.get_float("COMPRESSION_W_STRUCT", 0.4)
+        w_sem = tuning_manager.get_float("COMPRESSION_W_SEM", 0.4)
+        w_time = tuning_manager.get_float("COMPRESSION_W_TIME", 0.2)
         for i in range(len(nodes)):
             for j in range(i + 1, len(nodes)):
                 n1, n2 = nodes[i][0], nodes[j][0]
@@ -114,9 +123,9 @@ class WorkingMemory:
                 # 3. Temporal Overlap
                 temporal = 1.0 / (1.0 + abs(self.graph.nodes[n1].get('temporal_depth', 0) - self.graph.nodes[n2].get('temporal_depth', 0)))
                 
-                merge_score = (0.4 * structural) + (0.4 * semantic) + (0.2 * temporal)
+                merge_score = (w_struct * structural) + (w_sem * semantic) + (w_time * temporal)
                 
-                if merge_score > threshold: to_merge.append((n1, n2))
+                if merge_score > compression_threshold: to_merge.append((n1, n2))
         for n1, n2 in to_merge:
             if self.graph.has_node(n1) and self.graph.has_node(n2):
                 self.graph.nodes[n1]['activation'] = (self.graph.nodes[n1]['activation'] + self.graph.nodes[n2]['activation']) / 2

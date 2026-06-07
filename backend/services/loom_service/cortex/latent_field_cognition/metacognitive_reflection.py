@@ -1,6 +1,7 @@
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+from backend.config.tunningManagment import tuning_manager
 
 @dataclass
 class ThoughtHabit:
@@ -58,13 +59,13 @@ class Reflection:
         coherence = state.get("coherence", 0.5)
         surprise = state.get("surprise", 0.5)
         
-        import numpy as np
         identity_dissonance = 0.0
         if latent_field is not None:
             if self.identity_field is None:
                 self.identity_field = latent_field.copy()
             else:
-                self.identity_field = 0.95 * self.identity_field + 0.05 * latent_field
+                self_model_ema_alpha = tuning_manager.get_float("SELF_MODEL_EMA_ALPHA", 0.05)
+                self.identity_field = (1.0 - self_model_ema_alpha) * self.identity_field + self_model_ema_alpha * latent_field
                 inorm = np.linalg.norm(self.identity_field)
                 if inorm > 0: self.identity_field /= inorm
                 identity_dissonance = float(np.linalg.norm(latent_field - self.identity_field))
@@ -82,10 +83,13 @@ class Reflection:
             if len(self.history_metrics[k]) > 50: self.history_metrics[k].pop(0)
         
         # FIX: Normalize pressure components to prevent permanent saturation
-        raw_pressure = (0.3 * entropy) + (0.2 * (1.0 - coherence)) + (0.3 * surprise) + (0.2 * identity_dissonance)
+        reflect_w_entropy = tuning_manager.get_float("REFLECT_W_ENTROPY", 0.3)
+        reflect_w_coherence = tuning_manager.get_float("REFLECT_W_COHERENCE", 0.2)
+        raw_pressure = (reflect_w_entropy * entropy) + (reflect_w_coherence * (1.0 - coherence)) + (0.3 * surprise) + (0.2 * identity_dissonance)
         
         # FIX: Introduce pressure decay (EMA) for stability
-        self.current_pressure = (self.current_pressure * self.pressure_decay) + (raw_pressure * (1.0 - self.pressure_decay))
+        pressure_decay = tuning_manager.get_float("PRESSURE_DECAY", self.pressure_decay)
+        self.current_pressure = (self.current_pressure * pressure_decay) + (raw_pressure * (1.0 - pressure_decay))
         pressure = self.current_pressure
         
         confidence = (0.4 * coherence) + (0.3 * state.get("stability", 1.0)) + (0.3 * (1.0 - surprise))
@@ -110,7 +114,7 @@ class Reflection:
         return {
             "confidence": confidence,
             "reflection_pressure": pressure,
-            "trigger_correction": pressure > self.pressure_threshold,
+            "trigger_correction": pressure > tuning_manager.get_float("PRESSURE_THRESHOLD", self.pressure_threshold),
             "modulation_signals": modulation,
             "metrics": {
                 "epistemic": self.epistemic_score,

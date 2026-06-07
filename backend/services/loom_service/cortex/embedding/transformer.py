@@ -26,10 +26,10 @@ class EmbeddingTransformer:
 
     def __init__(self, model_name='all-MiniLM-L6-v2'):
         # Ensure initialization only happens once
-        if hasattr(self, 'model'): return
+        if hasattr(self, 'rake'): return
         
-        log_service(logger, f"Initializing EmbeddingTransformer Neural Engine ({model_name})...", "info")
-        self.model = SentenceTransformer(model_name)
+        self.model_name = model_name
+        self._model = None
         self.rake = Rake()
         try:
             self.nlp = spacy.load("en_core_web_sm")
@@ -66,6 +66,13 @@ class EmbeddingTransformer:
         doc = self.nlp(text)
         entities = [f"{ent.text} ({ent.label_})" for ent in doc.ents]
         return list(set(entities))
+
+    @property
+    def model(self):
+        if self._model is None:
+            log_service(logger, f"Initializing EmbeddingTransformer Neural Engine ({self.model_name})...", "info")
+            self._model = SentenceTransformer(self.model_name)
+        return self._model
 
     def get_embeddings(self, texts):
         """Batch generates embeddings."""

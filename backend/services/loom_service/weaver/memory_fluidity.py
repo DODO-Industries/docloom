@@ -1,17 +1,18 @@
 import math
 from typing import Tuple
+from backend.config.tunningManagment import tuning_manager
 
 class DynamicMemoryFluidity:
     """
     ============================================================================
-    DOCLOOM — DYNAMIC MEMORY FLUIDITY LOOP (Runtime Decay & Recall)
+    DOCLOOM — DYNAMIC MEMORY FLUIDITY SUBSTRATE (Calculus Decay Framework)
     ============================================================================
-    Manages spatiotemporal decay (entropy) of shard activations and retrieval 
-    reinforcement (plasticity) utilizing a hit-based immune shield.
+    Processes continuous entropy decay utilizing log-buffered friction shields.
     ============================================================================
     """
     def __init__(self, lambda_base: float = 0.05):
         self.lambda_base = lambda_base
+        self._is_default = (lambda_base == 0.05)
 
     def calculate_decay(
         self,
@@ -21,23 +22,27 @@ class DynamicMemoryFluidity:
         hits: int
     ) -> float:
         """
-        Spatiotemporal Degradation:
-        Decays activation level exponentially over elapsed time.
-        Retrieval Reinforcement:
-        Frequent hits grant an immune shield that slows down future decay rate.
+        Calculates exponential continuous decay using real-time deltas.
+        Dynamic memory counters slow the decay constant via logarithmic dampening.
         """
         elapsed_time = max(0.0, current_time - last_recalled)
+        if elapsed_time == 0.0:
+            return float(initial_activation)
         
-        # Effective decay rate decreases as hits increase
-        lambda_effective = self.lambda_base / (1.0 + max(0, hits))
+        # Implement log-buffered field friction to mitigate decay
+        if self._is_default:
+            memory_decay_rate = tuning_manager.get_float("MEMORY_DECAY_RATE", self.lambda_base)
+        else:
+            memory_decay_rate = self.lambda_base
+        lambda_effective = memory_decay_rate / (1.0 + math.log(1.0 + max(0, hits)))
         
-        # Exponential decay: A(t) = A0 * e^(-lambda * t)
+        # Continuum Equation: A(t) = A0 * e^(-λ_eff * Δt)
         decayed_activation = initial_activation * math.exp(-lambda_effective * elapsed_time)
         return float(decayed_activation)
 
     def reinforce(self, current_time: float, hits: int) -> Tuple[float, int]:
         """
-        When a thought is recalled, reset its last_recalled timestamp and increment hits.
-        Returns the updated (last_recalled, hits) tuple.
+        Updates tracking properties natively within the RAM ledger workspace.
         """
         return float(current_time), hits + 1
+

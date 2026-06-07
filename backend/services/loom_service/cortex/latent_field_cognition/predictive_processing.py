@@ -2,6 +2,7 @@ import numpy as np
 import networkx as nx
 from typing import List, Dict, Any, Optional
 import time
+from backend.config.tunningManagment import tuning_manager
 
 class PredictiveProcessingEngine:
     """ACTIVE INFERENCE: Predicts and learns future states."""
@@ -82,10 +83,12 @@ class PredictiveProcessingEngine:
     def compute_surprise(self, predicted: Dict[str, float], actual: List[str]) -> float:
         if not actual: return 0.0
         # FIX: Uncertainty-aware surprise (0.25 instead of 1.0) for new environments
-        if not predicted: return 0.25
+        surprise_default = tuning_manager.get_float("SURPRISE_DEFAULT", 0.25)
+        if not predicted: return surprise_default
         surprise = float(1.0 - sum(predicted.get(nid, 0.0) for nid in actual))
         self.prediction_history.append(surprise)
-        if len(self.prediction_history) > 100: self.prediction_history.pop(0)
+        surprise_window_size = tuning_manager.get_int("SURPRISE_WINDOW_SIZE", 100)
+        if len(self.prediction_history) > surprise_window_size: self.prediction_history.pop(0)
         return surprise
 
 class CausalGraphs:
@@ -101,7 +104,8 @@ class CausalGraphs:
         # Temporal adjacency ≠ causation. A causes B only if B is a predictable consequence of A.
         # We penalize the causal weight by the prediction error. If it's pure surprise, it's temporal noise.
         causal_strength = weight * (1.0 - prediction_error)
-        if causal_strength < 0.1: return # Reject pure temporal noise
+        causal_threshold = tuning_manager.get_float("CAUSAL_THRESHOLD", 0.1)
+        if causal_strength < causal_threshold: return # Reject pure temporal noise
         
         now = time.time()
         if self.causal_matrix.has_edge(node_a, node_b):
@@ -116,11 +120,13 @@ class CausalGraphs:
     def decay_stale_edges(self, decay_rate=0.1, threshold=0.05):
         now = time.time()
         to_remove = []
+        stale_decay_rate = tuning_manager.get_float("STALE_DECAY_RATE", decay_rate)
+        stale_prune_threshold = tuning_manager.get_float("STALE_PRUNE_THRESHOLD", threshold)
         for u, v, data in self.causal_matrix.edges(data=True):
             age = max(0, now - data.get('last_seen', now))
             if age > 60: # Older than 60 seconds
-                data['weight'] *= (1.0 - decay_rate)
-            if data['weight'] < threshold:
+                data['weight'] *= (1.0 - stale_decay_rate)
+            if data['weight'] < stale_prune_threshold:
                 to_remove.append((u, v))
         self.causal_matrix.remove_edges_from(to_remove)
         self.prune_orphan_nodes()

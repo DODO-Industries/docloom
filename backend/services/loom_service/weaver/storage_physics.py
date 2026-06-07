@@ -1,5 +1,6 @@
 import numpy as np
-from typing import Dict, List, Any, Optional
+import math
+from backend.config.tunningManagment import tuning_manager
 
 class LatentFieldPhysicsEngine:
     """
@@ -40,7 +41,8 @@ class LatentFieldPhysicsEngine:
         Mass vs Seed Scaffold warping:
         Mass warps the seed scaffold position towards the true content vector.
         """
-        warp_factor = mass / (1.0 + max(0.0, mass))
+        scaffold_warp = tuning_manager.get_float("SCAFFOLD_WARP", 1.0)
+        warp_factor = mass / (scaffold_warp + max(0.0, mass))
         momentum = seed_scaffold + warp_factor * (true_vector - seed_scaffold)
         
         # Normalize to keep vector representation stable
@@ -89,7 +91,39 @@ class LatentFieldPhysicsEngine:
             cosine_dist = 1.0 - cosine_sim
 
         # Gravitational force formula: G = (m_A * m_B) / (distance^2 + epsilon)
-        epsilon = 1e-4
+        epsilon = tuning_manager.get_float("GRAVITY_DENOM_OFFSET", 1e-4)
         distance_sq = max(cosine_dist ** 2, epsilon)
         grav_pull = (mass_a * mass_b) / distance_sq
         return float(grav_pull)
+
+    def calculate_excitation_gain(
+        self, 
+        hdc_similarity: float, 
+        query_phase: float, 
+        cell_phase: float,
+        eta: float = 0.4
+    ) -> float:
+        """
+        Calculates localized energy spikes using wave mechanics.
+        Gain scales based on phase proximity.
+        """
+        phase_delta = query_phase - cell_phase
+        wave_excitation_gain = tuning_manager.get_float("WAVE_EXCITATION_GAIN", eta)
+        return float(wave_excitation_gain * hdc_similarity * math.cos(phase_delta))
+
+    def compute_kuramoto_coupling(
+        self, 
+        active_phases: np.ndarray, 
+        active_activations: np.ndarray, 
+        current_phase: float,
+        coupling_k: float = 0.1
+    ) -> float:
+        """
+        Models phase interactions across active concepts on the fly.
+        """
+        if len(active_phases) == 0:
+            return 0.0
+        phase_deltas = active_phases - current_phase
+        attraction_forces = active_activations * np.sin(phase_deltas)
+        kuramoto_coupling = tuning_manager.get_float("KURAMOTO_COUPLING", coupling_k)
+        return float((kuramoto_coupling / len(active_phases)) * np.sum(attraction_forces))

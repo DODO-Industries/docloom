@@ -10,6 +10,7 @@ from backend.config.envConfig import setup_logger, log_service
 from backend.services.loom_service.cortex.embedding.transformer import EmbeddingTransformer
 from backend.services.loom_service.cortex.HyperVectorCreation import HyperVectorEngine
 from backend.services.loom_service.cortex.Morphogenesis import MorphogenesisEngine
+from backend.services.loom_service.cortex.embedding.embedding_manager import get_embeddings
 
 logger = setup_logger("SubstrateWeaver")
 
@@ -68,7 +69,7 @@ class SubstrateWeaver:
         log_service(logger, "Performing Semantic Enrichment...", "info")
         node_ids = list(self.nodes.keys())
         all_texts = [self.nodes[nid]["c"] for nid in node_ids]
-        all_embeddings = self.transformer.get_embeddings(all_texts)
+        all_embeddings = get_embeddings(all_texts)
         
         for i, nid in enumerate(node_ids):
             content = self.nodes[nid]["c"]

@@ -14,6 +14,7 @@ if project_root not in sys.path:
 
 from backend.config.envConfig import setup_logger, log_service
 from backend.services.loom_service.cortex.ResonanceField import ResonanceFieldEngine
+from backend.config.tunningManagment import tuning_manager
 
 logger = setup_logger("TemporalCognitiveStream")
 
@@ -93,7 +94,8 @@ class TemporalCognitiveStream:
         self.current_assembly = snapshot["assembly"]
         self.stabilize_stream()
 
-        if self._cycle_count % self._consolidation_interval == 0:
+        consolidation_interval = tuning_manager.get_int("CONSOLIDATION_INTERVAL", self._consolidation_interval)
+        if self._cycle_count % consolidation_interval == 0:
             self.deep_consolidation_cycle()
 
         log_service(
@@ -155,7 +157,7 @@ class TemporalCognitiveStream:
             self.attention_bias[sid] = math.tanh(prev + act)
 
     def update_attractors(self, assembly: List[Dict[str, Any]]) -> None:
-        EMA_ALPHA = 0.15
+        EMA_ALPHA = tuning_manager.get_float("ATTRACTOR_EMA", 0.15)
         active_ids = {node["shard_id"]: node["activation"] for node in assembly}
 
         prev_peak = self.current_assembly[0]["shard_id"] if self.current_assembly else None
@@ -187,12 +189,14 @@ class TemporalCognitiveStream:
 
     def _update_fatigue(self) -> None:
         active_ids = {node["shard_id"]: node["activation"] for node in self.current_assembly}
+        fatigue_rate = tuning_manager.get_float("FATIGUE_RATE", self._fatigue_rate)
         for sid, act in active_ids.items():
-            self.fatigue[sid] = min(0.9, self.fatigue.get(sid, 0.0) + self._fatigue_rate * act)
+            self.fatigue[sid] = min(0.9, self.fatigue.get(sid, 0.0) + fatigue_rate * act)
 
+        fatigue_decay = tuning_manager.get_float("FATIGUE_DECAY", self._fatigue_decay)
         for sid in list(self.fatigue):
             if sid not in active_ids:
-                self.fatigue[sid] *= self._fatigue_decay
+                self.fatigue[sid] *= fatigue_decay
                 if self.fatigue[sid] < self.EPSILON:
                     del self.fatigue[sid]
 
@@ -425,6 +429,9 @@ class TemporalCognitiveStream:
         peak_sid = self.current_assembly[0]["shard_id"]
         max_count = max(self.transition_memory.values()) if self.transition_memory else 1
 
+        fatigue_scaling = tuning_manager.get_float("FATIGUE_SCALING", 3.0)
+        transition_momentum = tuning_manager.get_float("TRANSITION_MOMENTUM", self.transition_momentum_strength)
+
         for (src, dst), count in self.transition_memory.items():
             if src != peak_sid:
                 continue
@@ -432,9 +439,9 @@ class TemporalCognitiveStream:
                 continue
 
             dst_fatigue = self.fatigue.get(dst, 0.0)
-            fatigue_gate = math.exp(-dst_fatigue * 3.0)
+            fatigue_gate = math.exp(-dst_fatigue * fatigue_scaling)
 
-            weight = (count / max_count) * self.transition_momentum_strength * fatigue_gate
+            weight = (count / max_count) * transition_momentum * fatigue_gate
             if weight > self.EPSILON:
                 self.field_engine.excite(dst, weight)
 

@@ -2,15 +2,14 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 import time
 
-from .cognitive_state_machine import CognitiveStateMachine
-from .consciousness_stream import ConsciousnessStream
+from .state_machine import CognitiveStateMachine
+from .consciousness_streaming import ConsciousnessStream
 from .global_workspace import GlobalWorkspace
-from .cognitive_scheduler import CognitiveScheduler
+from .cognitive_scheduling import CognitiveScheduler
 from .energy_regulation import EnergyRegulation
 from .temporal_awareness import TemporalAwareness
-from .cognitive_router import CognitiveRouter
+from .cognitive_routing import CognitiveRouter
 
-# Lazy imports for subsystems to avoid circular dependencies
 class CognitiveController:
     """
     The Brain Stem + Cognitive Cortex of DocLoom.

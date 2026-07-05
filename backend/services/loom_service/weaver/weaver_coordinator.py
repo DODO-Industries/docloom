@@ -539,6 +539,86 @@ class WeaveBrainCoordinator:
             "activation": r["decayed_activation"]
         } for r in top_results]
 
+    def orchestrate_weave(self, data: List[Any]) -> None:
+        """
+        Elevates Weaver as the sole orchestrator.
+        Takes raw data, passes it to the in-memory Cortex (SubstrateWeaver) for calculation,
+        then handles all physical storage to .brain_data crystals.
+        """
+        from backend.services.loom_service.cortex.SubstrateWeaver import SubstrateWeaver
+        
+        weaver = SubstrateWeaver(storage_dir=self.storage_dir)
+        # 1. Ask Cortex to calculate the graph in memory
+        result = weaver.weave(data, output_path=None)
+        
+        nodes = result["nodes"]
+        edges = result["edges"]
+        all_embeddings = result["all_embeddings"]
+        
+        # 2. Extract and persist the results (Weaver's job)
+        for edge in edges:
+            f_id = edge["f"]
+            if f_id in nodes:
+                if "edges" not in nodes[f_id]["m"]:
+                    nodes[f_id]["m"]["edges"] = []
+                nodes[f_id]["m"]["edges"].append(edge)
+
+        for nid, node in nodes.items():
+            if node["t"] in ["root", "meta_shard"]:
+                continue
+                
+            true_vec = None
+            if nid in all_embeddings:
+                true_vec = np.array(all_embeddings[nid], dtype=np.float32)[:self.dimension]
+                if len(true_vec) < self.dimension:
+                    true_vec = np.pad(true_vec, (0, self.dimension - len(true_vec)), constant_values=0.0)
+            elif "emb" in node["m"]:
+                packed_list = node["m"]["emb"]
+                packed_arr = np.array(packed_list, dtype=np.uint8)
+                unpacked = np.unpackbits(packed_arr)[:self.dimension]
+                true_vec = (unpacked.astype(np.float32) * 2.0) - 1.0
+                if len(true_vec) < self.dimension:
+                    true_vec = np.pad(true_vec, (0, self.dimension - len(true_vec)), constant_values=0.0)
+            else:
+                true_vec = np.zeros(self.dimension, dtype=np.float32)
+
+            mass = float(node["m"].get("mass", 1.0))
+            text = node.get("c", "")
+            
+            # Persist to dynamic crystals
+            self.ingest_shard(
+                shard_id=nid,
+                true_vector=true_vec,
+                text=text,
+                mass=mass,
+                metadata=node["m"]
+            )
+            
+        # 3. Persist the raw in-memory physics tensors from Cortex Engine
+        engine = weaver.engine
+        n = engine.current_node_count
+        coords = engine.coords_map[:n]
+        physics = engine.physics_map[:n]
+        hdc = engine.hdc_map[:n]
+        causal = engine.causal_map[:n]
+        
+        coords_path = os.path.join(self.storage_dir, "coordinates.bin")
+        physics_path = os.path.join(self.storage_dir, "physics_tensors.bin")
+        hdc_path = os.path.join(self.storage_dir, "hdc_signatures.bin")
+        causal_path = os.path.join(self.storage_dir, "causal_links.bin")
+        
+        with open(coords_path, "wb") as f:
+            f.write(coords.tobytes())
+        with open(physics_path, "wb") as f:
+            f.write(physics.tobytes())
+        with open(hdc_path, "wb") as f:
+            f.write(hdc.tobytes())
+        with open(causal_path, "wb") as f:
+            f.write(causal.tobytes())
+            
+        print("Weaver orchestration complete. Pure in-memory Cortex data successfully flushed to disk.")
+
+
     def save_cortex_state(self, cortex_state) -> None:
         """
         Saves the complete transient Cortex state (embeddings, coordinates, velocities, 

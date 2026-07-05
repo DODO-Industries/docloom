@@ -5,7 +5,7 @@ import time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from backend.services.loom_service.cortex import NeuralViewer, LoomNavigator
-from backend.services.loom_service.cognition import GlobalCognitiveState
+from backend.services.loom_service.cortex.latent_field_cognition import GlobalCognitiveState
 
 def print_header(text):
     print("\n" + "="*90)

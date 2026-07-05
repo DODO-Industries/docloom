@@ -12,7 +12,7 @@ def cosine_similarity_vec(v1, v2):
     if norm1 == 0 or norm2 == 0: return 0.0
     return dot / (norm1 * norm2)
 
-from backend.services.loom_service.cortex.embedding.embedding_manager import get_embedding_model
+from backend.services.LLM_service.embedding.embedding_manager import get_embedding_model
 
 def safe_normalize(vec: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(vec)

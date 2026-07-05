@@ -11,9 +11,9 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from backend.routes.loomServer_route import router as loom_router
-from backend.routes.AIServer_route import router as ai_router
-from backend.routes.embedding_route import router as embedding_router
+from backend.test.work_on_architecture.loomServer_route import router as loom_router
+from backend.test.work_on_architecture.AIServer_route import router as ai_router
+from backend.routes.embedding.embedding_route import router as embedding_router
 from backend.config.envConfig import setup_logger, log_service
 
 logger = setup_logger("DocLoomApp")

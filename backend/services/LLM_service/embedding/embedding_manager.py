@@ -1,4 +1,4 @@
-from backend.services.LLM_service.embedding_service import get_embedding_service
+from backend.services.LLM_service.embedding.embedding_service import get_embedding_service
 
 def get_embedding_model():
     """

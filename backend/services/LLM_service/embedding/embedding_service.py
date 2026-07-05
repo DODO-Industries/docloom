@@ -37,9 +37,9 @@ class LLMEmbeddingService:
         texts = [text] if is_single else list(text)
 
         # Tier 1: In-process lookup (FastAPI server context to avoid deadlocks)
-        if "backend.routes.embedding_route" in sys.modules:
+        if "backend.routes.embedding.embedding_route" in sys.modules:
             try:
-                from backend.routes.embedding_route import _transformer
+                from backend.routes.embedding.embedding_route import _transformer
                 if _transformer is not None and hasattr(_transformer, "model"):
                     embs = _transformer.model.encode(texts, **kwargs)
                     return embs[0] if is_single else embs

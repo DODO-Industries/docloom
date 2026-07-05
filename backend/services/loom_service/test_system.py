@@ -9,8 +9,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from backend.services.loom_service.cognition.unified_cognitive_field import GlobalCognitiveState
-from backend.services.loom_service.cognition.core.cognitive_controller import CognitiveController
+from backend.services.loom_service.cortex.latent_field_cognition.cognitive_field_substrate import GlobalCognitiveState
+from backend.services.loom_service.cortex.latent_field_cognition.core.cognitive_control import CognitiveController
 from backend.services.loom_service.orchestration.cognition_pipeline import CognitionPipeline
 from backend.services.loom_service.planning.hierarchical_planner import HierarchicalPlanner
 from backend.services.loom_service.planning.future_simulator import FutureSimulator

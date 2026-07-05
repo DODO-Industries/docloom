@@ -297,7 +297,7 @@ if __name__ == "__main__":
         sim_dog_human = local_cosine_similarity(emb_dog, emb_human)
     else:
         print("API server not active/responding. Falling back to local model loading...")
-        from backend.services.loom_service.cortex.embedding.transformer import EmbeddingTransformer
+        from backend.services.LLM_service.embedding.transformer import EmbeddingTransformer
         transformer = EmbeddingTransformer()
         local_embs = transformer.get_embeddings(words)
         emb_dog, emb_puppy, emb_human = local_embs[0], local_embs[1], local_embs[2]

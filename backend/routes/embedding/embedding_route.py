@@ -6,11 +6,11 @@ from typing import List
 
 # Ensure project root is in sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+project_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from backend.services.loom_service.cortex.embedding.transformer import EmbeddingTransformer
+from backend.services.LLM_service.embedding.transformer import EmbeddingTransformer
 from backend.config.envConfig import setup_logger, log_service
 
 logger = setup_logger("EmbeddingRoute")

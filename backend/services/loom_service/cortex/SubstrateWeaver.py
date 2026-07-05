@@ -4,18 +4,19 @@ import hashlib
 import re
 import os
 import math
+import time
 import numpy as np
 from collections import Counter
 from backend.config.envConfig import setup_logger, log_service
-from backend.services.loom_service.cortex.embedding.transformer import EmbeddingTransformer
+from backend.services.LLM_service.embedding.transformer import EmbeddingTransformer
 from backend.services.loom_service.cortex.HyperVectorCreation import HyperVectorEngine
-from backend.services.loom_service.cortex.Morphogenesis import MorphogenesisEngine
-from backend.services.loom_service.cortex.embedding.embedding_manager import get_embeddings
+from backend.services.loom_service.cortex.latent_field_cognition.dynamic_field_substrate import DynamicFieldSubstrateEngine
+from backend.services.LLM_service.embedding.embedding_manager import get_embeddings
 
 logger = setup_logger("SubstrateWeaver")
 
 class SubstrateWeaver:
-    def __init__(self, node_limit=1000):
+    def __init__(self, node_limit=1000, storage_dir="d:\\persnol\\DocLoom\\.brain_data"):
         self.nodes = {}
         self.edges = []
         self.concept_bridge = {}
@@ -24,6 +25,7 @@ class SubstrateWeaver:
         self.doc_root_id = None
         self.macro_shard_ids = []
         self.node_limit = node_limit
+        self.engine = DynamicFieldSubstrateEngine(max_nodes=10000, tau_collapse=5.0)
         self._init_graph()
 
     def _init_graph(self):
@@ -103,71 +105,75 @@ class SubstrateWeaver:
                         self.concept_bridge[c_hash] = []
                     self.concept_bridge[c_hash].append({"n": nid, "s": 1.0})
 
-        log_service(logger, "Running Morphogenesis Evolution...", "info")
-        morph = MorphogenesisEngine(self)
-        morph.grow()
+        # 1. Ingest baseline shards into dynamic substrate
+        log_service(logger, "Ingesting shards into Dynamic Field Substrate...", "info")
+        shard_ids = [nid for nid in node_ids if self.nodes[nid]["t"] not in ["root", "meta_shard", "macro_shard"]]
+        for nid in shard_ids:
+            orig_idx = node_ids.index(nid)
+            self.engine.ingest(nid, all_embeddings[orig_idx])
 
-        self._save_shards(output_path)
+        # 2. Stitch transitions chronologically between successive shards
+        log_service(logger, "Stitching chronological transitions...", "info")
+        for idx_sh in range(len(shard_ids) - 1):
+            self.engine.record_transition(shard_ids[idx_sh], shard_ids[idx_sh + 1])
 
+        # 3. Run physics simulation and density-based collapse synchronously
+        log_service(logger, "Running real-time physics & gravitational collapse updates...", "info")
+        for _ in range(10):  # Simulate 10 ticks (equivalent to ~1.0s at dt=0.1)
+            self.engine.run_physics_step()
 
-    def _save_shards(self, base_path):
-        base_dir = os.path.dirname(base_path)
-        base_name = os.path.basename(base_path).replace(".loom", "")
-        
-        data_nodes = {nid: n for nid, n in self.nodes.items() if n["t"] not in ["root", "meta_shard", "macro_shard"]}
-        struct_nodes = {nid: n for nid, n in self.nodes.items() if n["t"] in ["root", "meta_shard", "macro_shard"]}
-        
-        node_ids = list(data_nodes.keys())
-        total_shards = (len(node_ids) // self.node_limit) + 1
-        
-        log_service(logger, f"Architecture Expansion: Creating {total_shards} child shards + master substrate hub.", "info")
-        
-        node_shard_map = {}
-        for s in range(total_shards):
-            shard_nid_subset = node_ids[s * self.node_limit : (s + 1) * self.node_limit]
-            for nid in shard_nid_subset:
-                node_shard_map[nid] = s
-
-        shard_edges = {s: [] for s in range(total_shards)}
-        master_edges = []
-        
-        for edge in self.edges:
-            f_id, t_id = edge["f"], edge["t"]
-            
-            if f_id in node_shard_map and t_id in node_shard_map and node_shard_map[f_id] == node_shard_map[t_id]:
-                shard_edges[node_shard_map[f_id]].append(edge)
-            else:
-                master_edges.append(edge)
-
-        for s in range(total_shards):
-            shard_nid_subset = node_ids[s * self.node_limit : (s + 1) * self.node_limit]
-            shard_data = {nid: data_nodes[nid] for nid in shard_nid_subset}
-            
-            shard_path = os.path.join(base_dir, f"{base_name}_shard_{s}.loom")
-            with open(shard_path, "wb") as f:
-                bundle = {
-                    "v": "1.3", 
-                    "n": shard_data,
-                    "e": shard_edges[s] 
+        # 4. Integrate spawned macro nodes and edges
+        n = self.engine.current_node_count
+        concept_ids = self.engine.concept_ids
+        for i in range(n):
+            node_id = concept_ids[i]
+            if node_id not in self.nodes:
+                label = self.engine.probe_node_label(i)
+                mass = float(self.engine.physics_map[i, 0])
+                phase = float(self.engine.physics_map[i, 1])
+                activation = float(self.engine.physics_map[i, 2])
+                coords = self.engine.coords_map[i].tolist()
+                
+                self.nodes[node_id] = {
+                    "t": "macro_shard",
+                    "c": label,
+                    "m": {
+                        "emb": self.engine.hdc_map[i].tolist(),
+                        "mass": mass,
+                        "phase": phase,
+                        "activation": activation,
+                        "coords": coords
+                    }
                 }
-                f.write(msgpack.packb(bundle, use_bin_type=True))
+                self.connect(self.doc_root_id, node_id, "contains")
+
+        # Map containment and causal entanglements
+        for i in range(n):
+            node_id = concept_ids[i]
+            links = self.engine.causal_map[i]
+            for link in links:
+                target_idx = int(link[0])
+                if target_idx != -1 and target_idx < n:
+                    target_id = concept_ids[target_idx]
+                    strength = float(link[1])
+                    
+                    if target_id.startswith("macro_") and not node_id.startswith("macro_"):
+                        self.connect(target_id, node_id, "contains")
+                        if "parent_macro_shard" not in self.nodes[node_id]["m"]:
+                            self.nodes[node_id]["m"]["parent_macro_shard"] = target_id
+                    elif node_id.startswith("macro_") and target_id.startswith("macro_"):
+                        self.connect(node_id, target_id, "entanglement", score=strength)
+
+        log_service(logger, "Cortex Weaving completed successfully. Returning graph in-memory.", "info")
         
-        substrate_bundle = {
-            "v": "1.3",
-            "type": "substrate_master",
-            "map": node_shard_map,
-            "bridge": self.concept_bridge,
-            "g": {
-                "n": struct_nodes, 
-                "e": master_edges
-            }
+        vector_map = {nid: all_embeddings[i] for i, nid in enumerate(node_ids)}
+        
+        return {
+            "nodes": self.nodes,
+            "edges": self.edges,
+            "concept_bridge": self.concept_bridge,
+            "all_embeddings": vector_map
         }
-        
-        substrate_path = os.path.join(base_dir, f"substrate_{base_name}.loom")
-        with open(substrate_path, "wb") as f:
-            f.write(msgpack.packb(substrate_bundle, use_bin_type=True))
-            
-        log_service(logger, f"Master Substrate woven: {substrate_path}", "info")
 
     def load_and_expand(self, shard_paths):
         log_service(logger, f"Expanding architecture: Loading {len(shard_paths)} existing shards...", "info")

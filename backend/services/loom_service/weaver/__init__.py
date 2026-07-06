@@ -1,6 +1,7 @@
 from .seed_core import UniverseSeedCore
 from .atlas_router import GlobalAtlasRouter
-from .substrate_layout import LoomSubstrate
+from .substrate_layout import LoomSubstrate, LoomStore, detect_version
+from .universe_container import UniverseContainer
 from .storage_physics import LatentFieldPhysicsEngine
 from .memory_fluidity import DynamicMemoryFluidity
 from .weaver_coordinator import WeaveBrainCoordinator

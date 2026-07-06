@@ -26,9 +26,25 @@ This document explains the core files and the data flow within the `weaver` dire
    - Manages spatiotemporal decay. Calculates how fast an active thought fades from the RAM ledger based on time and a decay rate (`lambda_base`).
    - Executes the "Deep Sleep Protocol" to evict dormant nodes.
 
-6. **`substrate_layout.py` (`LoomSubstrate`)**
+6. **`substrate_layout.py` (`LoomStore` / `LoomSubstrate`)**
    - The lowest level I/O layer. Interacts directly with the physical binary files (`.loom`).
-   - Handles zero-copy memory mapping to fetch vectors without loading everything into memory.
+   - **v2 ("LOM2") — Append-Only Virtualized File System:**
+     - `.loom` = 64-byte mutable header + a pure append-only record log. The log is
+       **never rewritten and never truncated**. One shard ingest = one seek + one write.
+       Millions of virtual sub-files live inside a single OS file.
+     - `.loom.idx` ("LIX2") = a disposable acceleration snapshot: byte offsets, mass
+       array, precomputed norms, a **contiguous mmap-able float32 vector matrix**,
+       routing leaders and shard ids. If deleted or stale it is rebuilt from the log
+       (the log is the single source of truth). Written atomically via temp + replace.
+     - **Deep Sleep:** dormant shards cost 0 bytes of heap. Recall streams the mmap
+       matrix through the OS page cache; metadata is decoded only for returned winners.
+     - **Crash-safe:** the header commits after data; complete records written past a
+       torn header are re-adopted on open, partial (torn) records are rejected and
+       overwritten by the next append.
+     - Legacy v1 ("LOOM") files stay readable through the `LoomSubstrate` facade and
+       auto-migrate to v2 on first write.
+   - `LoomStore` is the handle API (append_shard / append_batch / dot_all / get_meta …);
+     `LoomSubstrate` remains as the static compatibility facade for old callers.
 
 ## The Full Detailed Flow
 
@@ -36,13 +52,14 @@ This document explains the core files and the data flow within the `weaver` dire
 1. **Seed Evaluation**: `WeaveBrainCoordinator` asks the `UniverseSeedCore` for a deterministic structural scaffold based on the shard ID.
 2. **Field Interference**: The `LatentFieldPhysicsEngine` calculates a "Momentum Vector" combining the shard's true embedding, the seed scaffold, and its mass.
 3. **Atlas Capture**: The `GlobalAtlasRouter` routes the momentum vector to the closest `.loom` crystal. If the crystal is too full, it fractures (cellular division) and registers a new sub-centroid.
-4. **Substrate Execution**: `LoomSubstrate` appends the shard, metadata, and vectors to the target physical `.loom` file.
-5. **Ledger Update**: The shard is added to the active RAM ledger and logged to the `cortex_journal.bin`.
+4. **Substrate Execution**: `LoomStore` **appends one record to the end of the log** — the crystal is never read back or rewritten. Bulk data uses `ingest_batch` (one write per crystal, one atlas save, one journal write).
+5. **Ledger Update**: The shard is added to the active RAM ledger (with its `crystal_idx` for O(1) recall overlay) and logged to the `cortex_journal.bin`.
 
-### Recall Flow (Querying)
+### Recall Flow (Querying) — fully vectorized
 1. **Decay Check**: `WeaveBrainCoordinator` enforces continuous decay. Any node in the RAM ledger with activation $\leq 0.001$ is evicted (Deep Sleep).
 2. **Topology Sweep**: The `GlobalAtlasRouter` identifies the closest target crystal for the incoming query vector.
-3. **Zero-Copy Fetch**: `LoomSubstrate` memory maps the target crystal, scanning shards.
-4. **Wave Resonance & Gravity**: The `LatentFieldPhysicsEngine` calculates similarity (HDC overlap) and calculates an excitation gain to wake up sleeping nodes, as well as a final gravitational score combining activation and mass.
-5. **Kuramoto Coupling**: The active phase angles of all awake nodes in the RAM ledger are synchronized (phase locked) to mimic coherent thought.
-6. **Reinforcement**: Top results have their activations boosted and are kept/added to the active RAM ledger.
+3. **Zero-Copy Fetch**: `LoomStore` scores **every shard at once** against the contiguous mmap vector matrix from `.loom.idx` (plus the small RAM tail) — no per-shard Python loop, no metadata decode.
+4. **Wave Resonance & Gravity (batch)**: the same physics formulas, computed as numpy arrays: $gain = \eta \cdot sim \cdot \cos(\Delta\phi)$, $G = m / \max((1-\cos)^2, \epsilon)$, $score = act \cdot G$.
+5. **Capped Re-awakening**: at scale a strong query can excite most of a crystal, so only the `RECALL_MAX_WAKE` strongest sleepers (default 256) are re-awakened into RAM; already-active nodes and top-k hits are always processed. Top results get the recall boost + hit reinforcement.
+6. **Kuramoto Coupling**: the active phase angles of all awake nodes in the RAM ledger are synchronized (phase locked) to mimic coherent thought.
+7. **Winner decode**: metadata (text) is unpacked **only for the returned top-k** — everything else stays asleep on disk.

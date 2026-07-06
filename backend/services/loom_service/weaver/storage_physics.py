@@ -111,10 +111,43 @@ class LatentFieldPhysicsEngine:
         wave_excitation_gain = tuning_manager.get_float("WAVE_EXCITATION_GAIN", eta)
         return float(wave_excitation_gain * hdc_similarity * math.cos(phase_delta))
 
+    def is_identity_wormhole(self) -> bool:
+        """True when the wormhole tensor is the identity (no space bending)."""
+        return bool(np.array_equal(self.wormhole_tensor, np.eye(self.dimension, dtype=np.float32)))
+
+    def calculate_excitation_gain_batch(
+        self,
+        hdc_similarities: np.ndarray,
+        query_phase: float,
+        cell_phases: np.ndarray,
+        eta: float = 0.4
+    ) -> np.ndarray:
+        """
+        Vectorized wave resonance: gain_i = eta * sim_i * cos(query_phase - phase_i).
+        Same physics as calculate_excitation_gain, computed for every shard at once.
+        """
+        wave_excitation_gain = tuning_manager.get_float("WAVE_EXCITATION_GAIN", eta)
+        return (wave_excitation_gain * hdc_similarities * np.cos(query_phase - cell_phases)).astype(np.float32)
+
+    def calculate_gravitational_attraction_batch(
+        self,
+        cosine_similarities: np.ndarray,
+        masses: np.ndarray,
+        mass_a: float = 1.0
+    ) -> np.ndarray:
+        """
+        Vectorized pointerless field edges: G_i = (m_a * m_i) / max((1 - cos_i)^2, eps).
+        Cosine similarities must already be computed in (optionally warped) space.
+        """
+        epsilon = tuning_manager.get_float("GRAVITY_DENOM_OFFSET", 1e-4)
+        cosine_dist = 1.0 - cosine_similarities
+        distance_sq = np.maximum(cosine_dist * cosine_dist, epsilon)
+        return (mass_a * masses / distance_sq).astype(np.float32)
+
     def compute_kuramoto_coupling(
-        self, 
-        active_phases: np.ndarray, 
-        active_activations: np.ndarray, 
+        self,
+        active_phases: np.ndarray,
+        active_activations: np.ndarray,
         current_phase: float,
         coupling_k: float = 0.1
     ) -> float:

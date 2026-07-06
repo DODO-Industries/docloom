@@ -11,12 +11,25 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from backend.test.work_on_architecture.loomServer_route import router as loom_router
-from backend.test.work_on_architecture.AIServer_route import router as ai_router
-from backend.routes.embedding.embedding_route import router as embedding_router
 from backend.config.envConfig import setup_logger, log_service
 
 logger = setup_logger("DocLoomApp")
+
+# Routers are mounted best-effort: the legacy loom/AI routes depend on modules
+# still living in test/work_on_architecture (unfinished refactor) — a broken
+# legacy import must not take down the core services.
+_routers = []
+for _name, _path in [
+    ("loom", "backend.test.work_on_architecture.loomServer_route"),
+    ("ai", "backend.test.work_on_architecture.AIServer_route"),
+    ("embedding", "backend.routes.embedding.embedding_route"),
+    ("neuro_visualizer", "backend.routes.visualizer.neuro_visualizer_route"),
+]:
+    try:
+        _mod = __import__(_path, fromlist=["router"])
+        _routers.append((_name, _mod.router))
+    except Exception as _e:
+        log_service(logger, f"Router '{_name}' unavailable ({_path}): {_e}", "warning")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,10 +53,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Routes
-app.include_router(loom_router)
-app.include_router(ai_router)
-app.include_router(embedding_router)
+# Mount Routes (best-effort — see loader above)
+for _name, _router in _routers:
+    app.include_router(_router)
+    log_service(logger, f"Mounted router: {_name}", "info")
 
 # Static Files for Visualizer
 LIBS_DIR = os.path.abspath(os.path.join(BASE_DIR, "utils", "webVisualizer", "libs"))
@@ -57,6 +70,7 @@ async def root():
         "status": "Running",
         "endpoints": {
             "visualizer": "/loom/visualizer",
+            "neuro_visualizer": "/loom/neuro",
             "loom_api": "/loom",
             "ai_api": "/ai"
         }

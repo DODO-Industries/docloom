@@ -63,19 +63,19 @@ class TestSubstrateWeaverIntegration(unittest.TestCase):
         # 2. Execute orchestrate_weave
         coordinator.orchestrate_weave(data)
         
-        # 3. Verify that output files were successfully created by the weaver coordinator
+        # 3. Verify the outputs: crystal log on disk + physics tensors as
+        #    segments inside the unified universe.loom container.
         crystal_path = os.path.join(self.test_dir, "crystal_1.loom")
         self.assertTrue(os.path.exists(crystal_path), "Crystal loom file was not created by WeaveBrainCoordinator.")
-        
-        coords_path = os.path.join(self.test_dir, "coordinates.bin")
-        physics_path = os.path.join(self.test_dir, "physics_tensors.bin")
-        hdc_path = os.path.join(self.test_dir, "hdc_signatures.bin")
-        causal_path = os.path.join(self.test_dir, "causal_links.bin")
-        
-        self.assertTrue(os.path.exists(coords_path), "Coordinates binary tensor was not saved.")
-        self.assertTrue(os.path.exists(physics_path), "Physics binary tensor was not saved.")
-        self.assertTrue(os.path.exists(hdc_path), "HDC signatures binary was not saved.")
-        self.assertTrue(os.path.exists(causal_path), "Causal links binary was not saved.")
+
+        universe_path = os.path.join(self.test_dir, "universe.loom")
+        self.assertTrue(os.path.exists(universe_path), "universe.loom container was not created.")
+        self.assertIsNotNone(coordinator.universe, "Coordinator did not bind the universe container.")
+
+        for segment in ["coordinates.bin", "physics_tensors.bin", "hdc_signatures.bin", "causal_links.bin"]:
+            blob = coordinator.universe.get_segment(segment)
+            self.assertIsNotNone(blob, f"{segment} segment was not saved into universe.loom.")
+            self.assertGreater(len(blob), 0, f"{segment} segment is empty.")
         
         # 4. Decode the crystal file and verify contents
         decoded = decode_loom(crystal_path)

@@ -109,14 +109,9 @@ class GlobalAtlasRouter:
         info["centroid"] = new_centroid.astype(np.float32)
         info["num_shards"] = n + 1
 
-    def save(self, path: Optional[str] = None) -> None:
-        """
-        Persists the lightweight atlas to disk in binary format.
-        """
-        save_path = path or self.atlas_path
-        if not save_path:
-            return
-
+    def to_bytes(self) -> bytes:
+        """Serializes the full atlas (header + crystal records) to bytes —
+        used both for the legacy atlas.capnp file and the universe.loom segment."""
         num_crystals = len(self.crystals)
         vector_dim = 0
         if num_crystals > 0:
@@ -137,18 +132,65 @@ class GlobalAtlasRouter:
             state_byte = STATE_MAP_TO_BYTE.get(info["state"], 2)
             num_shards = info["num_shards"]
             path_bytes = p.encode("utf-8")
-            
+
             prefix = struct.pack(RECORD_PREFIX_FORMAT, state_byte, num_shards, len(path_bytes))
             body.extend(prefix)
             body.extend(path_bytes)
-            
+
             centroid_f32 = info["centroid"].astype(np.float32)
             body.extend(centroid_f32.tobytes())
 
+        return bytes(header) + bytes(body)
+
+    def from_bytes(self, data: bytes) -> None:
+        """Restores the atlas from serialized bytes (header + crystal records)."""
+        if len(data) < HEADER_SIZE:
+            raise ValueError("Atlas payload is too small to contain a valid header.")
+
+        magic, _version, seed, num_crystals, vector_dim, _ = struct.unpack(
+            HEADER_FORMAT, data[:HEADER_SIZE]
+        )
+        if magic != b"ATLS":
+            raise ValueError(f"Invalid magic bytes in Atlas: {magic}")
+
+        self.seed = seed
+        self.crystals.clear()
+        pos = HEADER_SIZE
+
+        for _ in range(num_crystals):
+            if pos + RECORD_PREFIX_SIZE > len(data):
+                raise ValueError("Truncated record prefix in Atlas payload.")
+            state_byte, num_shards, path_len = struct.unpack_from(RECORD_PREFIX_FORMAT, data, pos)
+            pos += RECORD_PREFIX_SIZE
+            state = STATE_MAP_FROM_BYTE.get(state_byte, "warm")
+
+            if pos + path_len > len(data):
+                raise ValueError("Truncated path string in Atlas payload.")
+            p = data[pos:pos + path_len].decode("utf-8")
+            pos += path_len
+
+            centroid_size = vector_dim * 4
+            if pos + centroid_size > len(data):
+                raise ValueError("Truncated centroid vector in Atlas payload.")
+            centroid = np.frombuffer(data[pos:pos + centroid_size], dtype=np.float32).copy()
+            pos += centroid_size
+
+            self.crystals[p] = {
+                "state": state,
+                "centroid": centroid,
+                "num_shards": num_shards
+            }
+
+    def save(self, path: Optional[str] = None) -> None:
+        """
+        Persists the lightweight atlas to disk in binary format.
+        """
+        save_path = path or self.atlas_path
+        if not save_path:
+            return
         os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         with open(save_path, "wb") as f:
-            f.write(header)
-            f.write(body)
+            f.write(self.to_bytes())
 
     def load(self, path: Optional[str] = None) -> None:
         """
@@ -157,44 +199,5 @@ class GlobalAtlasRouter:
         load_path = path or self.atlas_path
         if not load_path or not os.path.exists(load_path):
             return
-
         with open(load_path, "rb") as f:
-            header_bytes = f.read(HEADER_SIZE)
-            if len(header_bytes) < HEADER_SIZE:
-                raise ValueError("Atlas file is too small to contain a valid header.")
-
-            magic, _version, seed, num_crystals, vector_dim, _ = struct.unpack(
-                HEADER_FORMAT,
-                header_bytes
-            )
-
-            if magic != b"ATLS":
-                raise ValueError(f"Invalid magic bytes in Atlas: {magic}")
-
-            self.seed = seed
-            self.crystals.clear()
-
-            for _ in range(num_crystals):
-                prefix_bytes = f.read(RECORD_PREFIX_SIZE)
-                if len(prefix_bytes) < RECORD_PREFIX_SIZE:
-                    raise ValueError("Truncated record prefix in Atlas file.")
-
-                state_byte, num_shards, path_len = struct.unpack(RECORD_PREFIX_FORMAT, prefix_bytes)
-                state = STATE_MAP_FROM_BYTE.get(state_byte, "warm")
-
-                path_bytes = f.read(path_len)
-                if len(path_bytes) < path_len:
-                    raise ValueError("Truncated path string in Atlas file.")
-                p = path_bytes.decode("utf-8")
-
-                centroid_size = vector_dim * 4
-                centroid_bytes = f.read(centroid_size)
-                if len(centroid_bytes) < centroid_size:
-                    raise ValueError("Truncated centroid vector in Atlas file.")
-                centroid = np.frombuffer(centroid_bytes, dtype=np.float32).copy()
-
-                self.crystals[p] = {
-                    "state": state,
-                    "centroid": centroid,
-                    "num_shards": num_shards
-                }
+            self.from_bytes(f.read())

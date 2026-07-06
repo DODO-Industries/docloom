@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocLoom — Neuromorphic Substrate</title>
+<style>
+  :root {
+    --bg: #05070e; --panel: rgba(11,15,26,.88); --border: #1a2236;
+    --ink: #c9d4e8; --muted: #5d6b85; --accent: #57d4f4;
+    --amber: #f4b857; --green: #4ade80; --magenta: #f471b5;
+    --mono: "Cascadia Code", Consolas, "SF Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink);
+               font-family: var(--mono); font-size: 12px; }
+  /* <canvas> is a replaced element — inset:0 alone does NOT stretch it to fill
+     the viewport (unlike a <div>); it must be told an explicit size. */
+  #gl { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+
+  .hud { position: fixed; z-index: 10; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+           backdrop-filter: blur(6px); }
+  .label { font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+
+  #title { top: 14px; left: 16px; }
+  #title h1 { font-size: 13px; font-weight: 600; letter-spacing: .08em; color: var(--ink); }
+  #title h1 span { color: var(--accent); }
+  #stats { margin-top: 6px; color: var(--muted); line-height: 1.7; }
+  #stats b { color: var(--ink); font-weight: 600; }
+
+  /* Component A — signature matrix */
+  #sigpanel { top: 96px; left: 16px; width: 276px; padding: 10px 12px 12px; }
+  #sigpanel .label { margin-bottom: 8px; }
+  #siggrid { display: block; width: 252px; height: 180px; image-rendering: pixelated;
+             background: #070a12; border: 1px solid var(--border); }
+  #sigverdict { margin-top: 7px; height: 14px; font-size: 10px; }
+  #sigverdict.assim { color: var(--green); }
+  #sigverdict.accom { color: var(--magenta); }
+
+  /* click-to-inspect node panel */
+  #nodeinfo { top: 350px; left: 16px; width: 276px; padding: 10px 12px 12px; display: none; }
+  #nodeinfo .close { float: right; cursor: pointer; color: var(--muted); }
+  #nodeinfo .close:hover { color: var(--ink); }
+  #nodeinfo-id { color: var(--accent); font-size: 11px; margin-top: 4px; }
+  #nodeinfo-text { color: var(--ink); font-size: 11px; margin-top: 4px; line-height: 1.5; }
+  #nodeinfo-meta { color: var(--muted); font-size: 9.5px; margin-top: 6px; }
+
+  /* Component D — universe.loom commit map */
+  #commitmap { top: 96px; right: 16px; width: 168px; padding: 10px 12px 12px; }
+  #commitmap .label { margin-bottom: 8px; }
+  #segbar { position: relative; width: 100%; height: 300px; border: 1px solid var(--border);
+            background: #070a12; overflow: hidden; }
+  .seg { position: absolute; left: 0; width: 100%; border-top: 1px solid rgba(26,34,54,.8);
+         transition: background .4s; }
+  .seg .segname { position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+                  font-size: 8.5px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+  .seg.flash { background: rgba(244,184,87,.42) !important; }
+  #segtotal { margin-top: 6px; color: var(--muted); font-size: 10px; }
+
+  /* recall results */
+  #results { top: 96px; right: 200px; width: 300px; max-height: 46vh; padding: 10px 12px;
+             overflow-y: auto; display: none; }
+  #results .label { margin-bottom: 6px; }
+  .res { padding: 6px 0; border-top: 1px solid var(--border); line-height: 1.45; }
+  .res:first-of-type { border-top: none; }
+  .res .rid { color: var(--accent); font-size: 10px; }
+  .res .rtxt { color: var(--ink); font-size: 11px; }
+  .res .rsc { color: var(--muted); font-size: 9.5px; }
+
+  /* command bar */
+  #cmdbar { bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px;
+            padding: 10px; align-items: center; width: min(720px, 92vw); }
+  #cmdinput { flex: 1; background: #070a12; border: 1px solid var(--border); border-radius: 5px;
+              color: var(--ink); font-family: var(--mono); font-size: 12px; padding: 9px 11px;
+              outline: none; }
+  #cmdinput:focus { border-color: var(--accent); }
+  .btn { border: 1px solid var(--border); background: #101627; color: var(--ink);
+         font-family: var(--mono); font-size: 11px; letter-spacing: .1em; padding: 9px 16px;
+         border-radius: 5px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+
+  /* event log */
+  #log { bottom: 76px; left: 16px; width: 360px; max-height: 148px; overflow: hidden;
+         pointer-events: none; display: flex; flex-direction: column-reverse; gap: 3px; }
+  .logline { font-size: 10px; color: var(--muted); opacity: .9; }
+  .logline b { color: var(--ink); font-weight: 600; }
+  .logline.g b { color: var(--green); } .logline.m b { color: var(--magenta); }
+  .logline.c b { color: var(--accent); } .logline.a b { color: var(--amber); }
+
+  #conn { top: 16px; right: 16px; padding: 6px 12px; font-size: 10px; letter-spacing: .12em; }
+  #conn.on { color: var(--green); } #conn.off { color: var(--magenta); }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="hud" id="title">
+  <h1>DOCLOOM <span>//</span> NEUROMORPHIC SUBSTRATE</h1>
+  <div id="stats" class="label">connecting…</div>
+</div>
+
+<div class="hud panel" id="sigpanel">
+  <div class="label">A · Signature Matrix — 128-bit Router</div>
+  <canvas id="siggrid" width="252" height="180"></canvas>
+  <div id="sigverdict"></div>
+</div>
+
+<div class="hud panel" id="commitmap">
+  <div class="label">D · universe.loom Commit Map</div>
+  <div id="segbar"></div>
+  <div id="segtotal"></div>
+</div>
+
+<div class="hud panel" id="results">
+  <div class="label">Recall — Top Assemblies</div>
+  <div id="reslist"></div>
+</div>
+
+<div class="hud panel" id="nodeinfo">
+  <div class="label">Selected Node <span class="close" onclick="hideNodeInfo()">✕</span></div>
+  <div id="nodeinfo-id"></div>
+  <div id="nodeinfo-text"></div>
+  <div id="nodeinfo-meta"></div>
+</div>
+
+<div class="hud" id="log"></div>
+<div class="hud panel" id="conn" class="off">● OFFLINE</div>
+
+<div class="hud panel" id="cmdbar">
+  <input id="cmdinput" placeholder="type a thought… then INGEST to store or RECALL to query the field" autocomplete="off">
+  <button class="btn" id="btn-ingest">INGEST</button>
+  <button class="btn primary" id="btn-recall">RECALL</button>
+</div>
+
+<script>
+"use strict";
+/* ================= WebGL2 particle field (no dependencies) ================= */
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
+
+const VS = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in float aHue;      // Kuramoto phase -> hue
+layout(location=2) in float aAct;      // activation 0..1
+layout(location=3) in float aSize;     // mass
+layout(location=4) in float aPulse;    // wave pulse 0..1
+uniform mat4 uProj, uView;
+uniform float uDpr;
+out float vHue; out float vAct; out float vPulse;
+void main() {
+  vec4 mv = uView * vec4(aPos, 1.0);
+  gl_Position = uProj * mv;
+  float base = 4.5 + aSize * 2.2 + aAct * 5.0 + aPulse * 10.0;
+  gl_PointSize = clamp(base * (170.0 / max(1.0, -mv.z)), 3.5, 90.0) * uDpr;
+  vHue = aHue; vAct = aAct; vPulse = aPulse;
+}`;
+const FS = `#version 300 es
+precision highp float;
+in float vHue; in float vAct; in float vPulse;
+out vec4 frag;
+vec3 hsl2rgb(float h, float s, float l) {
+  vec3 rgb = clamp(abs(mod(h*6.0 + vec3(0.0,4.0,2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+  return l + s * (rgb - 0.5) * (1.0 - abs(2.0*l - 1.0));
+}
+void main() {
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d);
+  if (r > 0.5) discard;
+  float core = smoothstep(0.5, 0.15, r);           // solid core so tiny points don't vanish
+  float glow = smoothstep(0.5, 0.0, r);
+  float shape = max(core, glow * 0.6);
+  float awake = clamp(vAct, 0.0, 1.0);
+  // dormant nodes: dim but clearly visible blue-grey (deep sleep, not invisible); awake: phase hue
+  vec3 dormant = vec3(0.30, 0.36, 0.50);
+  vec3 liveHue = hsl2rgb(vHue, 0.78, 0.46 + 0.24 * awake);
+  vec3 col = mix(dormant, liveHue, smoothstep(0.03, 0.30, awake));
+  col += vec3(0.35, 0.85, 1.0) * vPulse * 0.9;          // cyan wave flash
+  float alpha = shape * (0.55 + 0.45 * max(awake, vPulse));
+  frag = vec4(col * shape, alpha);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw gl.getProgramInfoLog(prog);
+gl.useProgram(prog);
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.SRC_ALPHA, gl.ONE);   // additive glow
+const uProj = gl.getUniformLocation(prog, "uProj");
+const uView = gl.getUniformLocation(prog, "uView");
+const uDprLoc = gl.getUniformLocation(prog, "uDpr");
+
+/* ---- matrices ---- */
+function perspective(fov, asp, near, far) {
+  const f = 1 / Math.tan(fov / 2), nf = 1 / (near - far);
+  return new Float32Array([f/asp,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+}
+function lookAt(eye) {
+  const z = norm3(eye), x = norm3(cross([0,1,0], z)), y = cross(z, x);
+  return new Float32Array([
+    x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
+    -dot3(x,eye), -dot3(y,eye), -dot3(z,eye), 1]);
+}
+const cross = (a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const dot3  = (a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm3 = v=>{const l=Math.hypot(...v)||1; return [v[0]/l,v[1]/l,v[2]/l];};
+
+/* ---- screen-space projection (mirrors the vertex shader, for click picking) ---- */
+let lastView = new Float32Array(16), lastProj = new Float32Array(16), lastCssW = 1, lastCssH = 1;
+function mulMat4Vec4(m, v) {
+  return [
+    m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+m[12]*v[3],
+    m[1]*v[0]+m[5]*v[1]+m[9]*v[2]+m[13]*v[3],
+    m[2]*v[0]+m[6]*v[1]+m[10]*v[2]+m[14]*v[3],
+    m[3]*v[0]+m[7]*v[1]+m[11]*v[2]+m[15]*v[3],
+  ];
+}
+function worldToScreen(x, y, z) {
+  const mv = mulMat4Vec4(lastView, [x, y, z, 1]);
+  const clip = mulMat4Vec4(lastProj, mv);
+  if (clip[3] <= 0.0001) return null;   // behind the camera
+  const ndcX = clip[0] / clip[3], ndcY = clip[1] / clip[3];
+  return [(ndcX * 0.5 + 0.5) * lastCssW, (1 - (ndcY * 0.5 + 0.5)) * lastCssH];
+}
+
+/* ---- camera (orbit) + click-to-inspect ---- */
+let camTheta = 0.6, camPhi = 1.15, camDist = 70, autoRot = true;
+let selectedIdx = -1;
+canvas.style.cursor = "grab";
+canvas.addEventListener("mousedown", e => {
+  autoRot = false;
+  canvas.style.cursor = "grabbing";
+  const sx = e.clientX, sy = e.clientY, t0 = camTheta, p0 = camPhi;
+  let moved = 0;
+  const move = ev => {
+    camTheta = t0 + (ev.clientX - sx) * 0.006;
+    camPhi = Math.min(2.9, Math.max(0.2, p0 + (ev.clientY - sy) * 0.006));
+    moved = Math.max(moved, Math.hypot(ev.clientX - sx, ev.clientY - sy));
+  };
+  const up = ev => {
+    window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up);
+    canvas.style.cursor = "grab";
+    if (moved < 5) pickNode(ev.clientX, ev.clientY);   // a real click, not a drag
+  };
+  window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+});
+canvas.addEventListener("wheel", e => { camDist = Math.min(400, Math.max(30, camDist + e.deltaY * 0.12)); });
+
+function pickNode(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = clientX - rect.left, my = clientY - rect.top;
+  let best = -1, bestDist = 22;   // 22px pick radius
+  for (let i = 0; i < N; i++) {
+    const s = worldToScreen(pos[i*3], pos[i*3+1], pos[i*3+2]);
+    if (!s) continue;
+    const d = Math.hypot(s[0] - mx, s[1] - my);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  selectedIdx = best;
+  if (best >= 0) showNodeInfo(nodes[best]); else hideNodeInfo();
+}
+function showNodeInfo(nd) {
+  document.getElementById("nodeinfo-id").textContent = nd.id;
+  document.getElementById("nodeinfo-text").textContent = nd.text || "(no text)";
+  document.getElementById("nodeinfo-meta").textContent =
+    `mass ${Number(nd.mass||0).toFixed(2)} · act ${Number(nd.activation||0).toFixed(2)} · ` +
+    `phase ${Number(nd.phase||0).toFixed(2)} · ${nd.crystal||""}`;
+  document.getElementById("nodeinfo").style.display = "block";
+}
+function hideNodeInfo() { selectedIdx = -1; document.getElementById("nodeinfo").style.display = "none"; }
+
+/* ---- node store + GPU buffers ---- */
+const MAXN = 4096;
+const pos = new Float32Array(MAXN*3), hue = new Float32Array(MAXN),
+      act = new Float32Array(MAXN),   size = new Float32Array(MAXN),
+      pulse = new Float32Array(MAXN);
+const targAct = new Float32Array(MAXN), targHue = new Float32Array(MAXN);
+let nodes = [], byId = new Map(), N = 0;
+
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+function makeBuf(loc, comps, arr) {
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, arr, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0);
+  return b;
+}
+const bPos = makeBuf(0,3,pos), bHue = makeBuf(1,1,hue), bAct = makeBuf(2,1,act),
+      bSize = makeBuf(3,1,size), bPulse = makeBuf(4,1,pulse);
+function push(buf, arr, n) { gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, arr, 0, n); }
+
+function addNode(nd, bright) {
+  let i = byId.has(nd.id) ? byId.get(nd.id) : (N < MAXN ? N++ : -1);
+  if (i < 0) return;
+  byId.set(nd.id, i); nodes[i] = nd;
+  pos[i*3] = nd.pos[0]; pos[i*3+1] = nd.pos[1]; pos[i*3+2] = nd.pos[2];
+  size[i] = Math.min(3.0, 0.5 + Math.log(1 + (nd.mass||1)) * 0.5);
+  targHue[i] = phase2hue(nd.phase||0); hue[i] = targHue[i];
+  targAct[i] = nd.activation||0; act[i] = bright ? 1.0 : targAct[i];
+  pulse[i] = bright ? 1.0 : 0.0;
+}
+const phase2hue = p => ((p % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) / (2*Math.PI);
+
+/* ---- wave state (Component B) ---- */
+let wave = null; // {origin:[x,y,z], r, gains:Map}
+function startWave(origin, gains, topIds) {
+  wave = { origin, r: 0, gains, top: new Set(topIds) };
+}
+
+/* ---- render loop ---- */
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  if (autoRot) camTheta += dt * 0.05;
+
+  // Component C: activation/phase easing + gravitational drift + deep-sleep fade
+  let cx=0, cy=0, cz=0, cw=0;
+  for (let i=0;i<N;i++){ const w=act[i]; cx+=pos[i*3]*w; cy+=pos[i*3+1]*w; cz+=pos[i*3+2]*w; cw+=w; }
+  if (cw > 0.01) { cx/=cw; cy/=cw; cz/=cw; }
+  for (let i=0;i<N;i++) {
+    act[i] += (targAct[i] - act[i]) * Math.min(1, dt*2.5);
+    let dh = targHue[i] - hue[i];
+    if (dh > .5) dh -= 1; if (dh < -.5) dh += 1;
+    hue[i] = (hue[i] + dh * Math.min(1, dt*2.0) + 1) % 1;
+    if (cw > 0.01 && act[i] > 0.15) {           // gravity creep toward active center of mass
+      const g = dt * 0.16 * act[i];
+      pos[i*3]   += (cx - pos[i*3])   * g;
+      pos[i*3+1] += (cy - pos[i*3+1]) * g;
+      pos[i*3+2] += (cz - pos[i*3+2]) * g;
+    }
+    pulse[i] = Math.max(0, pulse[i] - dt*1.4);
+  }
+  if (selectedIdx >= 0 && selectedIdx < N) pulse[selectedIdx] = Math.max(pulse[selectedIdx], 0.5);
+
+  // Component B: expanding wavefront
+  if (wave) {
+    wave.r += dt * 95;
+    const thick = 11;
+    for (let i=0;i<N;i++) {
+      const dx=pos[i*3]-wave.origin[0], dy=pos[i*3+1]-wave.origin[1], dz=pos[i*3+2]-wave.origin[2];
+      const d = Math.hypot(dx,dy,dz);
+      if (Math.abs(d - wave.r) < thick) {
+        const g = wave.gains.get(nodes[i]?.id) ?? 0.15;
+        pulse[i] = Math.max(pulse[i], Math.min(1, 0.25 + g) * (wave.top.has(nodes[i]?.id) ? 1.0 : 0.6));
+      }
+    }
+    if (wave.r > 260) wave = null;
+  }
+
+  push(bPos,pos,N*3); push(bHue,hue,N); push(bAct,act,N); push(bSize,size,N); push(bPulse,pulse,N);
+
+  // Render at the true device pixel ratio (capped) so the field is crisp,
+  // not upscaled-blurry, on HiDPI/scaled displays.
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
+  const bufW = Math.max(1, Math.round(cssW * dpr)), bufH = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== bufW || canvas.height !== bufH) { canvas.width = bufW; canvas.height = bufH; }
+  gl.viewport(0,0,bufW,bufH);
+  gl.clearColor(0.02,0.027,0.055,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  const eye = [ camDist*Math.sin(camPhi)*Math.cos(camTheta),
+                camDist*Math.cos(camPhi),
+                camDist*Math.sin(camPhi)*Math.sin(camTheta) ];
+  const proj = perspective(0.9, bufW/bufH, 0.1, 2000);
+  const view = lookAt(eye);
+  gl.uniformMatrix4fv(uProj, false, proj);
+  gl.uniformMatrix4fv(uView, false, view);
+  gl.uniform1f(uDprLoc, dpr);
+  gl.bindVertexArray(vao);
+  gl.drawArrays(gl.POINTS, 0, N);
+  lastView = view; lastProj = proj; lastCssW = cssW; lastCssH = cssH;   // for click picking
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ================= Component A — signature matrix ================= */
+const sigCanvas = document.getElementById("siggrid"), sctx = sigCanvas.getContext("2d");
+const sigRows = [];   // {bits:[128], color}
+function drawSigGrid(flashAll) {
+  const W = sigCanvas.width, H = sigCanvas.height, rows = Math.min(sigRows.length, 30);
+  sctx.fillStyle = "#070a12"; sctx.fillRect(0,0,W,H);
+  const rh = H / 30, bw = W / 128;
+  for (let r=0;r<rows;r++) {
+    const row = sigRows[sigRows.length-1-r];
+    for (let b=0;b<128;b++) if (row.bits[b]) {
+      sctx.fillStyle = flashAll ? "#8ecbff" : row.color;
+      sctx.fillRect(b*bw, r*rh+0.5, Math.max(1,bw-0.4), rh-1);
+    }
+  }
+}
+function sigEvent(bits, assimilated) {
+  drawSigGrid(true);                        // parallel Hamming sweep flash
+  setTimeout(() => {
+    sigRows.push({ bits, color: assimilated ? "rgba(74,222,128,.85)" : "rgba(244,113,181,.85)" });
+    if (sigRows.length > 64) sigRows.shift();
+    drawSigGrid(false);
+    const v = document.getElementById("sigverdict");
+    v.className = assimilated ? "assim" : "accom";
+    v.textContent = assimilated ? "≤32-bit match → ASSIMILATION (joined cluster)"
+                                : ">32-bit distance → ACCOMMODATION (new leader spawned)";
+  }, 140);
+}
+
+/* ================= Component D — commit map ================= */
+const segbar = document.getElementById("segbar");
+function drawCommitMap(uni) {
+  if (!uni || !uni.segments) return;
+  const entries = Object.entries(uni.segments);
+  entries.push(["journal ⇣", uni.journal_bytes || 0]);
+  const weights = entries.map(([,v]) => Math.log2(2 + v));
+  const total = weights.reduce((a,b)=>a+b,0) || 1;
+  segbar.innerHTML = "";
+  let y = 0;
+  const H = segbar.clientHeight, hues = ["#14324a","#1b2b45","#22304e","#1a3a3f","#2a2b4f","#173447"];
+  entries.forEach(([name, bytes], i) => {
+    const h = Math.max(9, weights[i] / total * H);
+    const div = document.createElement("div");
+    div.className = "seg"; div.style.top = y+"px"; div.style.height = h+"px";
+    div.style.background = name.startsWith("journal") ? "rgba(244,184,87,.16)" : hues[i % hues.length];
+    div.innerHTML = `<span class="segname">${name} · ${fmtBytes(bytes)}</span>`;
+    div.title = `${name}: ${bytes} bytes`;
+    segbar.appendChild(div);
+    y += h;
+  });
+  document.getElementById("segtotal").textContent =
+    `total ${fmtBytes(uni.total_bytes||0)} · gen ${uni.generation ?? "?"} · 1 file`;
+}
+function flashCommit() {
+  segbar.querySelectorAll(".seg").forEach(s => { s.classList.add("flash");
+    setTimeout(()=>s.classList.remove("flash"), 420); });
+}
+const fmtBytes = b => b > 1048576 ? (b/1048576).toFixed(1)+" MB" : b > 1024 ? (b/1024).toFixed(1)+" KB" : b+" B";
+
+/* ================= HUD helpers ================= */
+function logLine(cls, html) {
+  const el = document.createElement("div");
+  el.className = "logline " + cls; el.innerHTML = html;
+  const log = document.getElementById("log");
+  log.prepend(el);
+  while (log.children.length > 9) log.lastChild.remove();
+}
+function setStats(d) {
+  document.getElementById("stats").innerHTML =
+    `dim <b>${d.dimension}</b> · seed <b>${d.seed}</b> · nodes <b>${N}</b> · ` +
+    `awake <b id="awake">${d.ledger_size ?? 0}</b> · crystals <b>${(d.crystals||[]).length || "?"}</b>`;
+}
+
+/* ================= WebSocket ================= */
+let ws, ready = false;
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/loom/neuro/ws");
+  ws.onopen = () => { ready = true;
+    const c = document.getElementById("conn"); c.textContent = "● LIVE"; c.className = "hud panel on"; };
+  ws.onclose = () => { ready = false;
+    const c = document.getElementById("conn"); c.textContent = "● OFFLINE"; c.className = "hud panel off";
+    setTimeout(connect, 2000); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === "init") {
+      N = 0; byId.clear(); nodes = [];
+      (m.nodes||[]).forEach(nd => addNode(nd, false));
+      setStats(m); drawCommitMap(m.universe);
+      logLine("c", `<b>SUBSTRATE ONLINE</b> — ${m.nodes.length} shards visible`);
+    }
+    else if (m.type === "ingest_event") {
+      addNode(m.node, true);
+      sigEvent(m.signature, m.assimilated);
+      drawCommitMap(m.universe); flashCommit();
+      document.getElementById("awake") && (document.getElementById("awake").textContent = m.ledger_size);
+      logLine(m.assimilated ? "g" : "m",
+        `<b>${m.assimilated ? "ASSIMILATED" : "NEW CLUSTER"}</b> ${m.node.id} → ${m.node.crystal}` +
+        (m.division.length ? ` · <b>DIVISION</b> ${m.division.join(",")}` : ""));
+    }
+    else if (m.type === "recall_event") {
+      const gains = new Map(Object.entries(m.wave||{}));
+      startWave(m.query_pos, gains, (m.top||[]).map(r=>r.shard_id));
+      for (const [sid, ph] of Object.entries(m.phases||{})) {
+        const i = byId.get(sid); if (i !== undefined) targHue[i] = phase2hue(ph);
+      }
+      for (const [sid, a] of Object.entries(m.activations||{})) {
+        const i = byId.get(sid); if (i !== undefined) targAct[i] = a;
+      }
+      const list = document.getElementById("reslist");
+      list.innerHTML = (m.top||[]).map(r =>
+        `<div class="res"><div class="rid">${r.shard_id}</div>` +
+        `<div class="rtxt">${(r.text||"").slice(0,110)}</div>` +
+        `<div class="rsc">score ${Number(r.score).toFixed(2)} · act ${Number(r.activation).toFixed(2)} · hits ${r.hits}</div></div>`).join("");
+      document.getElementById("results").style.display = "block";
+      drawCommitMap(m.universe); flashCommit();
+      logLine("c", `<b>WAVE</b> propagated · ${gains.size} nodes excited · top: ${m.top?.[0]?.shard_id ?? "—"}`);
+    }
+    else if (m.type === "decay_event") {
+      for (let i=0;i<N;i++) targAct[i] = 0;
+      for (const [sid, a] of Object.entries(m.activations||{})) {
+        const i = byId.get(sid); if (i !== undefined) targAct[i] = a;
+      }
+      document.getElementById("awake") && (document.getElementById("awake").textContent = m.ledger_size);
+    }
+  };
+}
+connect();
+setInterval(() => { if (ready) ws.send(JSON.stringify({type:"decay_tick"})); }, 5000);
+
+/* ---- commands ---- */
+const input = document.getElementById("cmdinput");
+function send(type) {
+  const text = input.value.trim();
+  if (!text || !ready) return;
+  ws.send(JSON.stringify({ type, text }));
+  if (type === "ingest") input.value = "";
+  logLine("a", `<b>${type.toUpperCase()}</b> "${text.slice(0,48)}"`);
+}
+document.getElementById("btn-ingest").onclick = () => send("ingest");
+document.getElementById("btn-recall").onclick = () => send("recall");
+input.addEventListener("keydown", e => { if (e.key === "Enter") send(e.shiftKey ? "ingest" : "recall"); });
+</script>
+</body>
+</html>

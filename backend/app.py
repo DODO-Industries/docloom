@@ -36,6 +36,14 @@ async def lifespan(app: FastAPI):
     log_service(logger, "Initializing DocLoom Integrated Services...", "info")
     yield
     log_service(logger, "Shutting down services...", "info")
+    # Best-effort, matching the router-loading style above: flush the brain
+    # coordinator's final state on a clean shutdown rather than relying on
+    # __del__ at interpreter exit, which is not guaranteed to run.
+    try:
+        from backend.routes.visualizer.neuro_visualizer_route import close_coordinator
+        close_coordinator()
+    except Exception as _e:
+        log_service(logger, f"Coordinator shutdown skipped: {_e}", "warning")
 
 app = FastAPI(
     title="DocLoom Integrated Neural Engine",

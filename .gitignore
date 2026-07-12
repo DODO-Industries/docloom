@@ -4,5 +4,6 @@ __pycache__/
 .venv/
 .vscode/
 results/
+.brain_data/
 
 test/

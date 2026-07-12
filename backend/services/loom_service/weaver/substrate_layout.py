@@ -18,9 +18,11 @@ from typing import Dict, List, Tuple, Any, Optional, Iterator
 #
 #   .loom.idx  = disposable acceleration snapshot ("LIX2"): byte offsets,
 #                mass array, precomputed norms, a CONTIGUOUS float32 vector
-#                matrix, routing leaders and shard ids — all mmap'd zero-copy.
-#                If deleted or stale it is rebuilt from the log (the log is
-#                the single source of truth).
+#                matrix, routing leaders, shard ids, and a bucket_id per shard
+#                (which leader neighborhood it resolved to at ingest — the
+#                resonance-jump candidate narrowing in recall() reads this) —
+#                all mmap'd zero-copy. If deleted or stale it is rebuilt from
+#                the log (the log is the single source of truth).
 #
 #   Deep Sleep = dormant shards cost 0 bytes of heap. Reads jump straight to
 #                byte offsets via mmap; the OS page cache wakes only the
@@ -49,9 +51,15 @@ U32 = struct.Struct("<I")
 F32 = struct.Struct("<f")
 
 IDX_MAGIC = b"LIX2"
-IDX_VERSION = 1
+IDX_VERSION = 2  # v2 adds a trailing bucket_ids (uint16 x n) array — see checkpoint()/_try_load_idx()
 IDX_HEADER_FORMAT = "<4sHQQII"  # magic, version, covered_data_end, n_records, vector_dim, n_leaders
 IDX_HEADER_STRUCT = struct.Struct(IDX_HEADER_FORMAT)
+
+# Sentinel bucket_id for shards ingested before leader-bucket tracking existed,
+# or written through a path that doesn't assign one. Never matches a real
+# leader index, but recall() always includes sentinel shards as a safety net
+# so no shard silently becomes unreachable via the fast candidate-narrowing path.
+UNBUCKETED = 0xFFFF
 
 # Fold the RAM tail into the .idx snapshot once it grows past this many records.
 DEFAULT_CHECKPOINT_TAIL_LIMIT = 25000
@@ -207,6 +215,7 @@ class LoomStore:
         self._base_mass: Optional[np.ndarray] = None
         self._base_norms: Optional[np.ndarray] = None
         self._base_matrix: Optional[np.ndarray] = None
+        self._base_bucket_ids: Optional[np.ndarray] = None
         self._base_leaders: List[bytes] = []
         self._base_ids_blob: Optional[bytes] = None
         self._base_ids_cache: Optional[List[str]] = None
@@ -223,7 +232,9 @@ class LoomStore:
         self._id_index: Optional[Dict[str, int]] = None
         self._mass_cache: Optional[np.ndarray] = None
         self._norms_cache: Optional[np.ndarray] = None
+        self._bucket_id_cache: Optional[np.ndarray] = None
         self._tail_matrix_cache: Optional[np.ndarray] = None
+        self._leader_matrix_cache: Optional[np.ndarray] = None
 
         exists = os.path.exists(self.path) and os.path.getsize(self.path) > 0
         if exists:
@@ -344,9 +355,11 @@ class LoomStore:
         self._base_mass = None
         self._base_norms = None
         self._base_matrix = None
+        self._base_bucket_ids = None
         self._base_leaders = []
         self._base_ids_blob = None
         self._base_ids_cache = None
+        self._leader_matrix_cache = None
 
     def _try_load_idx(self) -> bool:
         self._idx_covered_end = HEADER_SIZE
@@ -360,6 +373,8 @@ class LoomStore:
                 raise ValueError("idx too small")
             magic, version, covered_end, n, dim, n_leaders = IDX_HEADER_STRUCT.unpack_from(mm, 0)
             if magic != IDX_MAGIC or version != IDX_VERSION:
+                # Includes the old v1 idx format (no bucket_ids array) — discard
+                # and rebuild from the log so every snapshot gains bucket_ids.
                 raise ValueError("bad idx magic/version")
             if dim != self.vector_dim:
                 raise ValueError("idx dim mismatch")
@@ -375,12 +390,15 @@ class LoomStore:
             if pos + ids_len > len(mm):
                 raise ValueError("idx ids blob truncated")
             ids_blob = bytes(mm[pos:pos + ids_len])
+            pos += ids_len
+            bucket_ids = np.frombuffer(mm, dtype="<u2", count=n, offset=pos); pos += n * 2
 
             self._base_n = n
             self._base_offsets = offsets
             self._base_mass = mass
             self._base_norms = norms
             self._base_matrix = matrix
+            self._base_bucket_ids = bucket_ids
             self._base_leaders = leaders
             self._base_ids_blob = ids_blob
             self._idx_covered_end = covered_end
@@ -497,6 +515,7 @@ class LoomStore:
             self._write_header()
             self._mass_cache = None
             self._norms_cache = None
+            self._bucket_id_cache = None
             self._tail_matrix_cache = None
 
             if len(self._tail_ids) >= self.checkpoint_tail_limit:
@@ -513,6 +532,7 @@ class LoomStore:
             self.data_end += len(blob)
             self.record_count += 1
             self._write_header()
+            self._leader_matrix_cache = None
 
     def checkpoint(self) -> None:
         """
@@ -555,6 +575,7 @@ class LoomStore:
                 ids_blob = msgpack.packb(all_ids, use_bin_type=True)
                 out.write(U32.pack(len(ids_blob)))
                 out.write(ids_blob)
+                out.write(self.bucket_ids_all().astype("<u2", copy=False).tobytes())
                 out.flush()
                 if self.fsync:
                     os.fsync(out.fileno())
@@ -570,6 +591,8 @@ class LoomStore:
             self._tail_metas = []
             self._tail_leaders = []
             self._tail_matrix_cache = None
+            self._bucket_id_cache = None
+            self._leader_matrix_cache = None
             self._remap_log()
             if not self._try_load_idx():
                 raise IOError("Failed to load freshly written .idx snapshot")
@@ -656,6 +679,25 @@ class LoomStore:
         with self._lock:
             return list(self._base_leaders) + list(self._tail_leaders)
 
+    def get_leader_matrix(self) -> np.ndarray:
+        """
+        Cached (num_leaders, 16) uint8 matrix of every leader signature —
+        rebuilt only when a leader is actually appended, not on every call.
+        The leader set is read on every ingest (bucket resolution) and every
+        large-crystal recall (resonance-jump entry), so avoiding a fresh
+        list-copy + byte-join + reshape each time matters at scale.
+        """
+        with self._lock:
+            if self._leader_matrix_cache is None:
+                leaders = self._base_leaders + self._tail_leaders
+                if leaders:
+                    self._leader_matrix_cache = np.frombuffer(
+                        b"".join(leaders), dtype=np.uint8
+                    ).reshape(len(leaders), 16)
+                else:
+                    self._leader_matrix_cache = np.empty((0, 16), dtype=np.uint8)
+            return self._leader_matrix_cache
+
     def mass_all(self) -> np.ndarray:
         with self._lock:
             if self._mass_cache is None:
@@ -678,6 +720,31 @@ class LoomStore:
                 self._norms_cache = np.concatenate(parts) if parts else np.empty(0, dtype=np.float32)
             return self._norms_cache
 
+    def bucket_ids_all(self) -> np.ndarray:
+        """
+        The LSH leader-bucket each shard resolved to at ingest time (uint16;
+        UNBUCKETED for shards written before this feature existed, or through
+        a path that never assigned one). Small enough (2 bytes/shard) to
+        always materialize fully — unlike the vector matrix, this is never
+        the expensive part of a query.
+        """
+        with self._lock:
+            if self._bucket_id_cache is None:
+                parts = []
+                if self._base_bucket_ids is not None and self._base_n:
+                    parts.append(np.asarray(self._base_bucket_ids, dtype=np.uint16))
+                if self._tail_metas:
+                    tail_bids = np.full(len(self._tail_metas), UNBUCKETED, dtype=np.uint16)
+                    for i, blob in enumerate(self._tail_metas):
+                        try:
+                            meta = msgpack.unpackb(blob, raw=False)
+                            tail_bids[i] = meta.get("bucket_id", UNBUCKETED)
+                        except Exception:
+                            pass
+                    parts.append(tail_bids)
+                self._bucket_id_cache = np.concatenate(parts) if parts else np.empty(0, dtype=np.uint16)
+            return self._bucket_id_cache
+
     def dot_all(self, q: np.ndarray) -> np.ndarray:
         """
         Vectorized dot product of every stored vector against q.
@@ -691,6 +758,27 @@ class LoomStore:
                 out[:self._base_n] = self._base_matrix @ q
             if self._tail_vectors:
                 out[self._base_n:] = self._tail_matrix() @ q
+            return out
+
+    def gather_vectors(self, idx_array: np.ndarray) -> np.ndarray:
+        """
+        Fancy-index gather of specific rows — the actual payoff of resonance-
+        jump candidate narrowing in recall(): touches only the candidate rows
+        through the mmap'd base matrix (OS page cache) instead of scanning
+        the whole crystal. Cheap whenever idx_array is a small fraction of n.
+        """
+        with self._lock:
+            idx_array = np.asarray(idx_array, dtype=np.int64)
+            out = np.empty((len(idx_array), self.vector_dim), dtype=np.float32)
+            if len(idx_array) == 0:
+                return out
+            base_mask = idx_array < self._base_n
+            if np.any(base_mask):
+                out[base_mask] = self._base_matrix[idx_array[base_mask]]
+            tail_mask = ~base_mask
+            if np.any(tail_mask):
+                tail_positions = idx_array[tail_mask] - self._base_n
+                out[tail_mask] = self._tail_matrix()[tail_positions]
             return out
 
     def iter_vector_blocks(self, block_size: int = 65536) -> Iterator[Tuple[int, np.ndarray]]:

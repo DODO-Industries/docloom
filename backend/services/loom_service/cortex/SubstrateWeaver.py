@@ -16,7 +16,10 @@ from backend.services.LLM_service.embedding.embedding_manager import get_embeddi
 logger = setup_logger("SubstrateWeaver")
 
 class SubstrateWeaver:
-    def __init__(self, node_limit=1000, storage_dir="d:\\persnol\\DocLoom\\.brain_data"):
+    def __init__(self, node_limit=1000, storage_dir=None):
+        # storage_dir is accepted (WeaveBrainCoordinator.orchestrate_weave
+        # passes it) but unused here — SubstrateWeaver only computes the
+        # in-memory graph; the coordinator does all physical persistence.
         self.nodes = {}
         self.edges = []
         self.concept_bridge = {}

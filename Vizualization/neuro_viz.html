@@ -58,6 +58,18 @@
   .seg.flash { background: rgba(244,184,87,.42) !important; }
   #segtotal { margin-top: 6px; color: var(--muted); font-size: 10px; }
 
+  /* Component E — crystal legend (multi-cluster overview) */
+  #crystals { top: 470px; right: 16px; width: 168px; padding: 10px 12px 12px; max-height: 26vh; overflow-y: auto; }
+  #crystals .label { margin-bottom: 8px; }
+  .cryrow { display: flex; align-items: center; gap: 7px; padding: 4px 2px; cursor: pointer;
+            border-radius: 4px; font-size: 10.5px; }
+  .cryrow:hover { background: rgba(87,212,244,.1); }
+  .cryrow.expanded { color: var(--accent); }
+  .cryswatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 5px currentColor; }
+  .cryname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+  .crycount { color: var(--muted); font-size: 9px; }
+  #crystals .hint { margin-top: 6px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+
   /* recall results */
   #results { top: 96px; right: 200px; width: 300px; max-height: 46vh; padding: 10px 12px;
              overflow-y: auto; display: none; }
@@ -80,6 +92,8 @@
          border-radius: 5px; cursor: pointer; }
   .btn:hover { border-color: var(--accent); color: var(--accent); }
   .btn.primary { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); color: var(--ink); }
 
   /* event log */
   #log { bottom: 76px; left: 16px; width: 360px; max-height: 148px; overflow: hidden;
@@ -113,6 +127,12 @@
   <div id="segtotal"></div>
 </div>
 
+<div class="hud panel" id="crystals">
+  <div class="label">E · Crystals (click to expand)</div>
+  <div id="crylist"></div>
+  <div class="hint">Only a small overview per crystal loads by default. Recalling into a crystal — or clicking it here — loads its fuller detail.</div>
+</div>
+
 <div class="hud panel" id="results">
   <div class="label">Recall — Top Assemblies</div>
   <div id="reslist"></div>
@@ -132,6 +152,8 @@
   <input id="cmdinput" placeholder="type a thought… then INGEST to store or RECALL to query the field" autocomplete="off">
   <button class="btn" id="btn-ingest">INGEST</button>
   <button class="btn primary" id="btn-recall">RECALL</button>
+  <button class="btn" id="btn-seed" title="Seed ~800 shards across 5 topics to form multiple crystals">SEED 5×</button>
+  <button class="btn" id="btn-sleep" title="Force a sleep cycle: consolidate recurring concepts into semantic crystals now">SLEEP NOW</button>
 </div>
 
 <script>
@@ -278,7 +300,11 @@ function showNodeInfo(nd) {
 function hideNodeInfo() { selectedIdx = -1; document.getElementById("nodeinfo").style.display = "none"; }
 
 /* ---- node store + GPU buffers ---- */
-const MAXN = 4096;
+// Generous enough to hold the default multi-crystal overview plus a few
+// expanded crystals (up to EXPAND_MAX_NODES=2000 each) at once without
+// silently dropping nodes — the per-frame update loops below stay O(N) with
+// simple arithmetic, so this comfortably stays smooth at this scale.
+const MAXN = 20000;
 const pos = new Float32Array(MAXN*3), hue = new Float32Array(MAXN),
       act = new Float32Array(MAXN),   size = new Float32Array(MAXN),
       pulse = new Float32Array(MAXN);
@@ -297,6 +323,79 @@ const bPos = makeBuf(0,3,pos), bHue = makeBuf(1,1,hue), bAct = makeBuf(2,1,act),
 function push(buf, arr, n) { gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, arr, 0, n); }
 
+/* ---- Component E: causal-graph edge rendering ----
+   Reuses the SAME bPos position buffer as the point pass (no duplicated
+   position data, no per-frame edge-position updates needed) — just an index
+   buffer of vertex-index pairs, rebuilt only when the edge set changes. */
+const EDGE_VS = `#version 300 es
+layout(location=0) in vec3 aPos;
+uniform mat4 uProj, uView;
+void main() { gl_Position = uProj * uView * vec4(aPos, 1.0); }`;
+const EDGE_FS = `#version 300 es
+precision highp float;
+out vec4 frag;
+void main() { frag = vec4(0.30, 0.55, 0.80, 0.30); }`;
+const edgeProg = gl.createProgram();
+gl.attachShader(edgeProg, compile(gl.VERTEX_SHADER, EDGE_VS));
+gl.attachShader(edgeProg, compile(gl.FRAGMENT_SHADER, EDGE_FS));
+gl.linkProgram(edgeProg);
+if (!gl.getProgramParameter(edgeProg, gl.LINK_STATUS)) throw gl.getProgramInfoLog(edgeProg);
+const eUProj = gl.getUniformLocation(edgeProg, "uProj");
+const eUView = gl.getUniformLocation(edgeProg, "uView");
+const edgeVao = gl.createVertexArray();
+gl.bindVertexArray(edgeVao);
+gl.bindBuffer(gl.ARRAY_BUFFER, bPos);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+const edgeIndexBuf = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, edgeIndexBuf);
+gl.bindVertexArray(null);
+
+let edgeList = [];            // [srcId, dstId, weight]
+let edgeKeySet = new Set();   // dedupe "src|dst"
+let edgeIndexDirty = true;
+let edgeIndexCount = 0;
+const MAX_EDGES_CLIENT = 4000;
+
+function addEdges(newEdges) {
+  if (!newEdges || !newEdges.length) return;
+  for (const [s, d, w] of newEdges) {
+    if (!s || !d || s === d) continue;
+    const key = s + "|" + d;
+    if (edgeKeySet.has(key)) continue;
+    edgeKeySet.add(key);
+    edgeList.push([s, d, w]);
+  }
+  if (edgeList.length > MAX_EDGES_CLIENT) {
+    const drop = edgeList.length - MAX_EDGES_CLIENT;
+    for (let i = 0; i < drop; i++) edgeKeySet.delete(edgeList[i][0] + "|" + edgeList[i][1]);
+    edgeList = edgeList.slice(drop);
+  }
+  edgeIndexDirty = true;
+}
+
+function rebuildEdgeIndexBuffer() {
+  const idx = [];
+  for (const [s, d] of edgeList) {
+    const si = byId.get(s), di = byId.get(d);
+    if (si === undefined || di === undefined) continue;   // endpoint not loaded (yet) — skip, not an error
+    idx.push(si, di);
+  }
+  edgeIndexCount = idx.length;
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, edgeIndexBuf);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(idx.length ? idx : [0, 0]), gl.DYNAMIC_DRAW);
+  edgeIndexDirty = false;
+}
+
+/* ---- Sleep cycle: semantic crystals shimmer permanently, superseded nodes
+   are treated as a low activation floor rather than a new GPU attribute ---- */
+let superseededIds = new Set();
+function markSuperseded(sid) {
+  superseededIds.add(sid);
+  const i = byId.get(sid);
+  if (i !== undefined) targAct[i] = Math.min(targAct[i], 0.08);
+}
+
 function addNode(nd, bright) {
   let i = byId.has(nd.id) ? byId.get(nd.id) : (N < MAXN ? N++ : -1);
   if (i < 0) return;
@@ -306,6 +405,8 @@ function addNode(nd, bright) {
   targHue[i] = phase2hue(nd.phase||0); hue[i] = targHue[i];
   targAct[i] = nd.activation||0; act[i] = bright ? 1.0 : targAct[i];
   pulse[i] = bright ? 1.0 : 0.0;
+  if (nd.superseded_by || superseededIds.has(nd.id)) markSuperseded(nd.id);
+  edgeIndexDirty = true;  // a newly-known id may resolve previously-unresolvable edges
 }
 const phase2hue = p => ((p % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) / (2*Math.PI);
 
@@ -337,6 +438,7 @@ function frame(t) {
       pos[i*3+2] += (cz - pos[i*3+2]) * g;
     }
     pulse[i] = Math.max(0, pulse[i] - dt*1.4);
+    if (nodes[i]?.semantic_crystal) pulse[i] = Math.max(pulse[i], 0.3 + 0.15 * Math.sin(t * 0.002 + i));
   }
   if (selectedIdx >= 0 && selectedIdx < N) pulse[selectedIdx] = Math.max(pulse[selectedIdx], 0.5);
 
@@ -370,6 +472,16 @@ function frame(t) {
                 camDist*Math.sin(camPhi)*Math.sin(camTheta) ];
   const proj = perspective(0.9, bufW/bufH, 0.1, 2000);
   const view = lookAt(eye);
+  if (edgeIndexDirty) rebuildEdgeIndexBuffer();
+  if (edgeIndexCount > 0) {
+    gl.useProgram(edgeProg);
+    gl.uniformMatrix4fv(eUProj, false, proj);
+    gl.uniformMatrix4fv(eUView, false, view);
+    gl.bindVertexArray(edgeVao);
+    gl.drawElements(gl.LINES, edgeIndexCount, gl.UNSIGNED_INT, 0);
+  }
+
+  gl.useProgram(prog);
   gl.uniformMatrix4fv(uProj, false, proj);
   gl.uniformMatrix4fv(uView, false, view);
   gl.uniform1f(uDprLoc, dpr);
@@ -452,6 +564,61 @@ function setStats(d) {
     `awake <b id="awake">${d.ledger_size ?? 0}</b> · crystals <b>${(d.crystals||[]).length || "?"}</b>`;
 }
 
+/* ================= Component E — crystal legend (multi-cluster overview) ================= */
+let lastCrystalsInfo = [];
+let expandedClientSet = new Set();
+function renderCrystalLegend(crystals) {
+  lastCrystalsInfo = crystals || lastCrystalsInfo;
+  const list = document.getElementById("crylist");
+  list.innerHTML = lastCrystalsInfo.map(c => {
+    const h = Math.round((c.hue ?? 0) * 360);
+    const cls = expandedClientSet.has(c.name) ? "cryrow expanded" : "cryrow";
+    return `<div class="${cls}" data-crystal="${c.name}" title="click to load full detail">` +
+      `<span class="cryswatch" style="background:hsl(${h},75%,55%);color:hsl(${h},75%,55%)"></span>` +
+      `<span class="cryname">${c.name}</span><span class="crycount">${c.num_shards}</span></div>`;
+  }).join("") || `<div style="color:var(--muted);font-size:10px;">no crystals yet</div>`;
+  list.querySelectorAll(".cryrow").forEach(row => {
+    row.addEventListener("click", () => {
+      if (!ready) return;
+      ws.send(JSON.stringify({ type: "expand_crystal", crystal: row.dataset.crystal }));
+    });
+  });
+}
+
+function applyFullSnapshot(m) {
+  // Shared by "init" (fresh connect/refresh) and "bulk_done" (feeder finished)
+  // — both replace the whole visible world in one shot, not incrementally.
+  N = 0; byId.clear(); nodes = [];
+  edgeList = []; edgeKeySet = new Set(); edgeIndexDirty = true;
+  (m.nodes || []).forEach(nd => addNode(nd, false));
+  addEdges(m.edges);
+  renderCrystalLegend(m.crystals);
+  setStats(m);
+  drawCommitMap(m.universe);
+}
+
+/* ---- ingest_event coalescing: buffer rapid-fire ingests and flush the
+   heavy DOM/GPU work (commit map, signature flash) at most every ~80ms
+   instead of once per shard — this is what prevents "blockage" under any
+   fast-repeated ingest traffic, feeder or otherwise. ---- */
+let ingestQueue = [];
+setInterval(() => {
+  if (!ingestQueue.length) return;
+  const batch = ingestQueue; ingestQueue = [];
+  for (const m of batch) { addNode(m.node, true); addEdges(m.edges); }
+  const last = batch[batch.length - 1];
+  sigEvent(last.signature, last.assimilated);
+  drawCommitMap(last.universe); flashCommit();
+  document.getElementById("awake") && (document.getElementById("awake").textContent = last.ledger_size);
+  if (batch.length === 1) {
+    logLine(last.assimilated ? "g" : "m",
+      `<b>${last.assimilated ? "ASSIMILATED" : "NEW CLUSTER"}</b> ${last.node.id} → ${last.node.crystal}` +
+      (last.division.length ? ` · <b>DIVISION</b> ${last.division.join(",")}` : ""));
+  } else {
+    logLine("a", `<b>INGESTED</b> ${batch.length} shards (batched)`);
+  }
+}, 80);
+
 /* ================= WebSocket ================= */
 let ws, ready = false;
 function connect() {
@@ -464,19 +631,11 @@ function connect() {
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
     if (m.type === "init") {
-      N = 0; byId.clear(); nodes = [];
-      (m.nodes||[]).forEach(nd => addNode(nd, false));
-      setStats(m); drawCommitMap(m.universe);
-      logLine("c", `<b>SUBSTRATE ONLINE</b> — ${m.nodes.length} shards visible`);
+      applyFullSnapshot(m);
+      logLine("c", `<b>SUBSTRATE ONLINE</b> — ${m.nodes.length} shards visible across ${lastCrystalsInfo.length} crystal(s)`);
     }
     else if (m.type === "ingest_event") {
-      addNode(m.node, true);
-      sigEvent(m.signature, m.assimilated);
-      drawCommitMap(m.universe); flashCommit();
-      document.getElementById("awake") && (document.getElementById("awake").textContent = m.ledger_size);
-      logLine(m.assimilated ? "g" : "m",
-        `<b>${m.assimilated ? "ASSIMILATED" : "NEW CLUSTER"}</b> ${m.node.id} → ${m.node.crystal}` +
-        (m.division.length ? ` · <b>DIVISION</b> ${m.division.join(",")}` : ""));
+      ingestQueue.push(m);   // coalesced on the 80ms flush timer above
     }
     else if (m.type === "recall_event") {
       const gains = new Map(Object.entries(m.wave||{}));
@@ -487,6 +646,7 @@ function connect() {
       for (const [sid, a] of Object.entries(m.activations||{})) {
         const i = byId.get(sid); if (i !== undefined) targAct[i] = a;
       }
+      addEdges(m.edges);
       const list = document.getElementById("reslist");
       list.innerHTML = (m.top||[]).map(r =>
         `<div class="res"><div class="rid">${r.shard_id}</div>` +
@@ -502,6 +662,34 @@ function connect() {
         const i = byId.get(sid); if (i !== undefined) targAct[i] = a;
       }
       document.getElementById("awake") && (document.getElementById("awake").textContent = m.ledger_size);
+    }
+    else if (m.type === "expand_event") {
+      (m.nodes||[]).forEach(nd => addNode(nd, false));
+      addEdges(m.edges);
+      expandedClientSet.add(m.crystal);
+      renderCrystalLegend();
+      logLine("c", `<b>EXPANDED</b> ${m.crystal} — ${(m.nodes||[]).length} nodes loaded`);
+    }
+    else if (m.type === "bulk_progress") {
+      logLine("a", `<b>SEEDING</b> ${m.done}/${m.total} shards · ${m.crystals} crystal(s) so far`);
+    }
+    else if (m.type === "sleep_event") {
+      const groups = m.consolidated || [];
+      if (!groups.length) {
+        logLine("c", "<b>SLEEP</b> — nothing recurring enough to consolidate yet");
+      }
+      for (const g of groups) {
+        if (g.node) { addNode(g.node, true); addEdges((g.source_shard_ids||[]).map(sid => [sid, g.new_shard, 1.0])); }
+        (g.source_shard_ids || []).forEach(markSuperseded);
+        logLine("c", `<b>SLEEP</b> consolidated ${(g.source_shard_ids||[]).length} shards under "${g.concept}" &rarr; ${g.new_shard}`);
+      }
+    }
+    else if (m.type === "bulk_done") {
+      expandedClientSet.clear();
+      applyFullSnapshot(m);
+      const btn = document.getElementById("btn-seed");
+      btn.disabled = false; btn.textContent = "SEED 5×";
+      logLine("c", `<b>SEED COMPLETE</b> — ${lastCrystalsInfo.length} crystals, ${m.nodes.length} shards visible`);
     }
   };
 }
@@ -520,6 +708,20 @@ function send(type) {
 document.getElementById("btn-ingest").onclick = () => send("ingest");
 document.getElementById("btn-recall").onclick = () => send("recall");
 input.addEventListener("keydown", e => { if (e.key === "Enter") send(e.shiftKey ? "ingest" : "recall"); });
+
+document.getElementById("btn-seed").onclick = () => {
+  if (!ready) return;
+  const btn = document.getElementById("btn-seed");
+  btn.disabled = true; btn.textContent = "SEEDING…";
+  logLine("a", "<b>SEED</b> requesting ~800 shards across 5 topics to form multiple crystals…");
+  ws.send(JSON.stringify({ type: "bulk_ingest" }));
+};
+
+document.getElementById("btn-sleep").onclick = () => {
+  if (!ready) return;
+  logLine("a", "<b>SLEEP</b> forcing a consolidation pass…");
+  ws.send(JSON.stringify({ type: "sleep_now" }));
+};
 </script>
 </body>
 </html>

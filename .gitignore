@@ -7,3 +7,11 @@ results/
 .brain_data/
 
 test/
+
+# module_AI stress-test data/artifacts (downloaded corpora, benchmark output)
+module_AI/data/
+module_AI/benchmarks/*.json
+module_AI/benchmarks/*.jsonl
+module_AI/benchmarks/*.log
+module_AI/benchmarks/*.txt
+*.brain_data/

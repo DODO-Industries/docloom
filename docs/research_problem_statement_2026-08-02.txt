@@ -1,0 +1,182 @@
+DOCLOOM — SYSTEM AUDIT + RESEARCH PROBLEM STATEMENT
+Generated 2026-08-02, after the module_loom restructure. All numbers below are
+from a live run today (backend/test/benchmark/run_retrieval.py), not recycled
+from old notes, unless marked "(prior session, unverified today)".
+
+
+=====================================================================
+PART 1 — WHAT'S ACTUALLY WRONG RIGHT NOW (verified today)
+=====================================================================
+
+1. Ingest and query latency are DocLoom's real weakness, not its dynamics.
+   Live numbers today, 8,000-sentence real corpus, MiniLM-384 embeddings,
+   100 known-item queries, DocLoom vs FAISS on the SAME data:
+
+     system              R@1    R@5    MRR    p50 latency   ingest
+     faiss_exact         0.50   0.70   0.582  <1ms           effectively instant
+     faiss_hnsw          0.50   0.70   0.582  <1ms           21,785 docs/s
+     docloom_fullscan    0.50   0.71   0.579  83ms           554 docs/s
+     docloom_narrow20    0.32   0.42   0.368  66ms           554 docs/s
+     docloom_narrow5     0.17   0.21   0.185  50ms           554 docs/s
+
+   Full-scan DocLoom matches FAISS on quality (this is expected and good —
+   it means the cognitive scoring isn't actively hurting plain retrieval
+   anymore). But the moment you narrow the candidate set for speed
+   (RECALL_SEED_LEADERS, the default production path), recall collapses:
+   0.50 -> 0.32 -> 0.17. Narrowing is currently a blunt, un-tuned dial, not
+   an adaptive mechanism. THIS is the open problem, not the physics.
+
+2. Ingest throughput (554 docs/s) is ~40x slower than FAISS's flat insert
+   (21,785 docs/s) because every ingested shard runs the FULL cognitive
+   pipeline (momentum routing, leader clustering, causal-graph updates,
+   spatiotemporal physics tick). There is no "fast write path" vs "slow
+   consolidation path" split at ingest time — everything is synchronous.
+
+3. Deferred architectural debt, confirmed still present in the current code
+   (module_loom/services/weaver/weaver_coordinator.py):
+     - hash_to_shard is a plain in-RAM Python dict, not mmap-backed. Every
+       shard reference (of which there can be millions) lives in process
+       memory. This is the real ceiling on how big a single brain can get
+       on one machine.
+     - universe.loom checkpointing rewrites via _carryover_segments on
+       every save — an O(total size) operation, not O(delta). Checkpoint
+       cost grows with total brain size forever; there's no incremental
+       journal-only fast path once a segment exists.
+     - Single-writer-per-process by design (documented in run_server.bat) —
+       no horizontal scaling story. This is a single-machine system today.
+
+4. CAUSAL_SPREAD_WEIGHT ships at 0.0 (disabled) in .modelTunning. The one
+   mechanism that's PROVEN to beat cosine similarity (multi-hop/associative
+   recall, prior session numbers: DocLoom 0.80 vs cosine 0.55 answer@5, and
+   0.56 vs 0.00 on the hard "cosine literally cannot see it" subset) is off
+   by default. Nobody has run the rigorous ablation (Kuramoto phase / off vs
+   causal-hops / off vs gravity / off, one term at a time) to prove which
+   piece of the physics is load-bearing. This is still Step 1 of the
+   research roadmap from last month and it's still not done.
+
+5. Sleep-cycle consolidation (LLM-authored "semantic crystal" summaries)
+   measured a 3.3% hallucination rate against a real entailment judge
+   (prior session, unverified today: 8/10 clean, 2/10 added an unsupported
+   claim). That's a quantified, honest number — good for a thesis — but it
+   means the positive-slope claim ("quality doesn't degrade as the store
+   grows") is not yet proven at scale; it's only been tested at small n.
+
+Net: the cognitive/physics layer is no longer actively hurting quality
+(that was the big fix from last month). The open problems now are ENGINEERING
+ones — throughput, adaptive narrowing, and memory residency at scale — not
+"does the brain metaphor work." That reframing matters for where you pitch
+this next (see Part 3).
+
+
+=====================================================================
+PART 2 — THE NOVEL PROBLEM STATEMENT
+=====================================================================
+
+Framing you gave me: models are increasingly NOT fully resident in RAM
+anymore (MoE expert offload, paged KV-caches, disk-backed weight streaming —
+vLLM's PagedAttention, DeepSeek/Mixtral-style expert routing, FlexGen-style
+CPU/disk offload). At the same time, DocLoom is a memory substrate that
+ALSO decides, independently, what stays "hot" in RAM (ram_ledger, active
+crystals) versus what sleeps to disk (.loom files). Right now these are two
+completely separate caching systems that have never been designed to talk
+to each other, in this codebase or — as far as the July research sweep
+found — anywhere published.
+
+THE UNCLAIMED PROBLEM (sharpened version of gap #2 from the July research
+memory — "no system couples a self-organizing store with a latent
+interface" — now pointed specifically at the RAM-residency angle):
+
+    "Co-scheduled residency: can a living memory substrate and a partially
+    resident model share ONE eviction policy instead of two independent
+    ones, so that 'which memory shards stay hot' and 'which model
+    experts/KV-pages stay hot' are the same resource-allocation decision —
+    and does that beat treating them as separate caches under a fixed
+    combined RAM budget?"
+
+Why this is a real gap, not a restatement of RAG:
+  - Every existing memory system (A-MEM, MemOS, Zep, Nemori, DocLoom itself)
+    manages its OWN hotness/eviction with no visibility into what the model
+    serving stack is doing with ITS memory (KV cache, expert weights).
+  - Every existing serving-side paging system (PagedAttention, MoE expert
+    offload, FlexGen) manages GPU/CPU/disk placement with no visibility
+    into what the memory/RAG layer is doing.
+  - Nobody has proposed a SHARED salience signal — e.g., "this memory shard
+    and the KV-pages/experts it tends to co-activate should be evicted or
+    kept together" — because nobody who owns the memory layer also owns
+    the serving stack, and vice versa. DocLoom happens to already have the
+    ingredient the model side is missing: a per-shard, ACT-R-style
+    activation/recency/gravity score (already implemented, already
+    measured). That score is currently used ONLY for DocLoom's own
+    eviction. The novel move is exporting it as the shared currency.
+
+Concrete, falsifiable experiment (buildable on what already exists):
+  1. Take a frozen small model served with a paged/offloaded backend
+     (vLLM with a deliberately undersized KV-cache budget, or a toy
+     MoE with forced expert offload — this is the one new piece of
+     infra to stand up).
+  2. Baseline: model paging and DocLoom shard paging run as two
+     independent LRU/activation caches under a combined RAM budget
+     smaller than (model + full memory) would need.
+  3. Treatment: a single allocator that ranks ALL residency units — KV
+     pages, expert weights, AND memory shards — on one shared
+     activation/recency score (DocLoom's gravity/activation formula,
+     extended to cover the model-side units) and evicts globally by that
+     score.
+  4. Measure: task accuracy (e.g. LongMemEval-style knowledge-update QA)
+     and end-to-end latency at 3-4 RAM budget points, baseline vs
+     treatment. Win condition: treatment holds accuracy flat while
+     baseline degrades as the combined budget shrinks, OR treatment hits
+     equal accuracy at a measurably smaller combined budget.
+  5. Kill condition (pre-register this, it's what makes it credible):
+     if joint scheduling doesn't beat independent LRU by a real margin at
+     any budget point, the answer is "the two caches really are
+     independent problems" — still a publishable negative result per the
+     July memory's own standard (pre-registered negatives count).
+
+This is the actual PhD/MIT-pitchable core: not "a faster vector store,"
+not "a brain metaphor," but "residency scheduling is a single joint
+problem across the model and its external memory, and nobody has posed it
+that way." It reuses DocLoom's ALREADY-BUILT and ALREADY-MEASURED activation
+scoring — you are not starting from zero.
+
+
+=====================================================================
+PART 3 — WHAT'S REALISTIC TO CLAIM "DONE TODAY" VS STILL OPEN
+=====================================================================
+
+Honest framing, because a same-day "finished research" claim would not
+survive five minutes of scrutiny from an MIT researcher or an AI lab
+research scientist:
+
+DONE TODAY (this file + the live benchmark run above): a sharpened,
+falsifiable problem statement, an honest audit of the current system's
+real weaknesses, and a concrete experiment design that's buildable from
+what already exists in this repo.
+
+NOT DONE TODAY, genuinely needs weeks: the actual co-scheduling allocator,
+the paged-serving testbed, and the accuracy-vs-budget curves that would
+make this a result instead of a proposal. Anyone credible will ask for
+those numbers before taking the idea seriously — that's true of MIT, of
+any AI lab, of a PhD committee. The July research memory already flagged
+this pattern once (thesis-novelty-assessment): the honest, self-aware
+gap-finding IS the strong part of this work; overclaiming "revolutionary,
+done" is the part that would hurt you.
+
+On outreach: I'm not going to invent names or email addresses for MIT
+faculty or AI-lab researchers to email "on your behalf" — I have no way to
+verify a real, current, correctly-spelled contact, and a cold email built
+on a guessed address either bounces or lands on the wrong desk, which
+actively hurts a first impression. What's real and worth using: the July
+sweep already found a genuinely relevant, currently-accepting venue —
+MemAgents @ ICLR, which explicitly accepts short (2-page) position/result
+papers on exactly this kind of memory-architecture work. That's a concrete,
+citable target you can look up and submit to yourself, which is a stronger
+first move than a cold email to a specific person.
+
+For the PhD angle specifically: the strongest thing to lead with in an
+application or a professor email is Part 1 + Part 2 of this file, framed
+as "here is a gap I found, here is why the obvious answer doesn't apply
+(the July memory's prior-art sweep — ACT-R, spreading activation,
+Generative Agents, PagedAttention, MoE offload), and here is the
+experiment I'd run to test it" — not "I built a second brain." The former
+reads as research judgment; the latter reads as a demo.

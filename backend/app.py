@@ -15,15 +15,12 @@ from backend.config.envConfig import setup_logger, log_service
 
 logger = setup_logger("DocLoomApp")
 
-# Routers are mounted best-effort: the legacy loom/AI routes depend on modules
-# still living in test/work_on_architecture (unfinished refactor) — a broken
-# legacy import must not take down the core services.
+# Mount active core routes
 _routers = []
 for _name, _path in [
-    ("loom", "backend.test.work_on_architecture.loomServer_route"),
-    ("ai", "backend.test.work_on_architecture.AIServer_route"),
-    ("embedding", "backend.routes.embedding.embedding_route"),
-    ("neuro_visualizer", "backend.routes.visualizer.neuro_visualizer_route"),
+    ("embedding", "module_loom.routes.embedding_routes"),
+    ("neuro_visualizer", "module_loom.routes.visualizer_routes"),
+    ("testing_visualizer", "module_loom.routes.testing_routes"),
 ]:
     try:
         _mod = __import__(_path, fromlist=["router"])
@@ -40,7 +37,7 @@ async def lifespan(app: FastAPI):
     # coordinator's final state on a clean shutdown rather than relying on
     # __del__ at interpreter exit, which is not guaranteed to run.
     try:
-        from backend.routes.visualizer.neuro_visualizer_route import close_coordinator
+        from module_loom.routes.visualizer_routes import close_coordinator
         close_coordinator()
     except Exception as _e:
         log_service(logger, f"Coordinator shutdown skipped: {_e}", "warning")
@@ -67,7 +64,7 @@ for _name, _router in _routers:
     log_service(logger, f"Mounted router: {_name}", "info")
 
 # Static Files for Visualizer
-LIBS_DIR = os.path.abspath(os.path.join(BASE_DIR, "utils", "webVisualizer", "libs"))
+LIBS_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "module_loom", "utils", "webVisualizer", "libs"))
 if os.path.exists(LIBS_DIR):
     app.mount("/libs", StaticFiles(directory=LIBS_DIR), name="libs")
 
@@ -77,8 +74,9 @@ async def root():
         "app": "DocLoom",
         "status": "Running",
         "endpoints": {
-            "visualizer": "/loom/visualizer",
+            "testing_visualizer": "/loom/testing",
             "neuro_visualizer": "/loom/neuro",
+            "visualizer": "/loom/visualizer",
             "loom_api": "/loom",
             "ai_api": "/ai"
         }

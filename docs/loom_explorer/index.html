@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocLoom Architecture Deep Dive — Complete Interactive Explorer</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- KaTeX for pristine math rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⚛</div>
+        <div class="brand-title">DocLoom <span>Core</span></div>
+      </div>
+
+      <div class="nav-group-label">Architecture</div>
+      <a class="nav-link active" href="#architecture">⚡ Core Paradigm</a>
+      <a class="nav-link" href="#pipeline">🔄 Data Flow Pipeline</a>
+      <a class="nav-link" href="#lifecycle-tour" style="color: var(--accent-teal); font-weight: 600;">🎬 Full Lifecycle Tour</a>
+      <a class="nav-link" href="#simulations">🧪 Live Physics Lab</a>
+      <a class="nav-link" href="#connections">🕸️ Function Call Matrix</a>
+
+      <div class="nav-group-label">Code Drill-Down</div>
+      <a class="nav-link" href="#code-drilldown">📂 File &amp; Class Directory</a>
+      <a class="nav-link" href="#mod-weaver">├── Weaver &amp; Storage</a>
+      <a class="nav-link" href="#mod-cortex">├── Cortex &amp; HDC</a>
+      <a class="nav-link" href="#mod-services_and_api">└── API &amp; Services</a>
+
+      <div class="nav-group-label">Deep Mechanics</div>
+      <a class="nav-link" href="#storage-layouts">💾 Physical Binary Layouts</a>
+      <a class="nav-link" href="#formulas">📐 Mathematical Formulas</a>
+      <a class="nav-link" href="#future-vision" style="color: var(--accent-purple); font-weight: 600;">🚀 Future Vision &amp; Roadmap</a>
+
+      <button id="theme-toggle" class="theme-toggle-btn">🌙 Dark Mode</button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      
+      <!-- Hero Banner -->
+      <section class="hero-banner" id="architecture">
+        <span class="hero-tag">Neuromorphic Systems Architecture</span>
+        <h1 class="hero-title">DocLoom Complete Architecture Drill-Down</h1>
+        <p class="hero-desc">
+          An exhaustive, code-level blueprint of DocLoom's self-contained memory universe: how information transforms from raw multimodal input into continuous embeddings, HDC symbolic signatures, procedural seed coordinates, binary append logs, living physical fields, and active causal inference.
+        </p>
+      </section>
+
+      <!-- Paradigm Grid -->
+      <section style="margin-bottom: 40px;">
+        <h2 class="section-title">Foundational Pillars <span class="badge">4 Core Principles</span></h2>
+        <div class="grid-2" id="paradigm-grid"></div>
+      </section>
+
+      <!-- Data Flow Pipeline Diagram -->
+      <section style="margin-bottom: 48px;" id="pipeline">
+        <h2 class="section-title">End-to-End Data Flow Pipeline <span class="badge">The 10-Stage Lifecycle</span></h2>
+        <div class="card" style="font-family: var(--font-mono); font-size: 13px; line-height: 1.8; background: var(--bg-surface);">
+          <div style="color: var(--accent-teal); font-weight: 700; margin-bottom: 8px;">[ WRITE / INGEST PATHWAY ]</div>
+          <div style="color: var(--text-muted);">
+            1. Raw Text / Multimodal Chunk<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--text-main);">embedding_service.py:</strong> Computes 384-D continuous float vector t<br/>
+            2. Dual Representations<br/>
+            &nbsp;&nbsp;&nbsp;├──► <strong style="color:var(--accent-purple);">HyperVectorCreation.py:</strong> Projects to 8000-D bipolar {-1, +1} via sign(P * t)<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--accent-teal);">SubstrateWeaver.py:</strong> Derives physics scalars: Mass (m), Energy (E), Phase (θ)<br/>
+            3. Procedural Placement &amp; Momentum Warp<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--text-main);">storage_physics.py &amp; seed_core.py:</strong> Gets seed socket s; warps to p = norm(s + w(t - s))<br/>
+            4. Celestial Routing &amp; Cellular Division<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--text-main);">atlas_router.py:</strong> Cosine match to nearest crystal centroid; splits if full<br/>
+            5. LSH Neighborhood Jump Partition<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--text-main);">weaver_coordinator.py:</strong> 128-bit sign hash; Hamming ≤ 32 assimilate or accommodate<br/>
+            6. Physical Append Execution<br/>
+            &nbsp;&nbsp;&nbsp;├──► <strong style="color:var(--text-main);">substrate_layout.py (LOM2):</strong> Appends binary record (vector + mass + msgpack meta)<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--text-main);">universe_container.py (LUNI):</strong> Journals ledger transaction &amp; crystal updates<br/>
+            7. Active Living Dynamics<br/>
+            &nbsp;&nbsp;&nbsp;├──► <strong style="color:var(--accent-teal);">weaver_coordinator.py:</strong> ram_ledger entry + process_cognitive_tick(0.8)<br/>
+            &nbsp;&nbsp;&nbsp;└──► <strong style="color:var(--accent-purple);">predictive_processing.py:</strong> Seeds sequential causal edge prev -&gt; this (coherence gated)
+          </div>
+          
+          <div style="border-top: 1px dashed var(--border); margin: 20px 0; padding-top: 16px; color: var(--accent-green); font-weight: 700;">
+            [ READ / RECALL PATHWAY ]
+          </div>
+          <div style="color: var(--text-muted);">
+            Query Vector q ──► ACT-R Spatiotemporal Decay (all active nodes in RAM)<br/>
+            &nbsp;&nbsp;&nbsp;└──► Atlas Route ──► LSH Jump (open top 24 leader buckets) ──► Optional Causal Graph Hop<br/>
+            &nbsp;&nbsp;&nbsp;└──► Warped Newtonian Gravity G = (m_q * m_i) / max((1 - cos)², ε)<br/>
+            &nbsp;&nbsp;&nbsp;└──► Monotonic Activation Boost: Score = G * (1 + 0.25 * A)<br/>
+            &nbsp;&nbsp;&nbsp;└──► Kuramoto Phase-Locking: Closed-form O(N) oscillator synchrony<br/>
+            &nbsp;&nbsp;&nbsp;└──► Winner Reinforcement (hits += 1, wake top sleepers) ──► Top-K Metadata Decode
+          </div>
+        </div>
+      </section>
+
+      <!-- Interactive Data Lifecycle Tour (From Ingestion to Sleep Consolidation) -->
+      <section style="margin-bottom: 48px;" id="lifecycle-tour">
+        <h2 class="section-title">End-to-End Data Lifecycle Tour <span class="badge">Interactive Animated Stepper</span></h2>
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px;">
+          Track a single memory packet (e.g. <em>"Car A braked suddenly at the intersection"</em>) step-by-step through its entire physical life. Click any station or press <strong>Play Tour</strong> to watch the transit animation!
+        </p>
+
+        <!-- Stepper Navigation Bar -->
+        <div class="steps-bar" id="lifecycle-steps-bar">
+          <!-- Populated by lifecycle_anim.js -->
+        </div>
+
+        <!-- Animation Canvas -->
+        <div class="card" style="margin-bottom: 20px; padding: 16px 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 10px;">
+              <button id="lifecycle-play-btn" class="control-btn primary">▶ Play Full Lifecycle Tour</button>
+              <button id="lifecycle-prev-btn" class="control-btn">◀ Previous</button>
+              <button id="lifecycle-next-btn" class="control-btn">Next ▶</button>
+            </div>
+            <span class="file-meta-pill" style="color: var(--accent-teal);">Interactive Station Transit</span>
+          </div>
+          <canvas id="lifecycle-canvas" width="800" height="70" style="width: 100%; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border);"></canvas>
+        </div>
+
+        <!-- Stage Detailed Inspector Card -->
+        <div class="card" style="border-left: 4px solid var(--accent-teal);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div>
+              <span id="stage-tag" style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; display: inline-block; margin-bottom: 4px;"></span>
+              <h3 id="stage-title" style="font-family: var(--font-heading); font-size: 20px; font-weight: 700; color: var(--text-main);"></h3>
+            </div>
+          </div>
+
+          <p id="stage-desc" style="font-size: 14px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6;"></p>
+
+          <div class="grid-2" style="margin-bottom: 16px;">
+            <div style="background: var(--bg-primary); padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+              <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;">Live Data State</div>
+              <div id="stage-data-box"></div>
+            </div>
+
+            <div style="background: var(--bg-primary); padding: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+              <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;">Execution Details</div>
+              <div style="font-size: 12px; font-family: var(--font-mono); margin-bottom: 6px;">
+                <span style="color: var(--text-dim);">File:</span> <span id="stage-file" style="color: var(--accent-teal);"></span>
+              </div>
+              <div style="font-size: 12px; font-family: var(--font-mono); margin-bottom: 8px;">
+                <span style="color: var(--text-dim);">Func:</span> <span id="stage-func" style="color: var(--accent-purple);"></span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                <span style="color: var(--text-dim); font-weight: 600;">Physics Action:</span> <span id="stage-action"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Interactive Simulations Laboratory -->
+      <section style="margin-bottom: 48px;" id="simulations">
+        <h2 class="section-title">Interactive Physics Laboratory <span class="badge">Live Animated Simulations</span></h2>
+        
+        <!-- Sim 1: Kuramoto Phase Oscillators -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+            <h3 class="card-title" style="color: var(--accent-purple);">1. Kuramoto Coupled Oscillator Phase Ring</h3>
+            <span id="kuramoto-order-badge" class="file-meta-pill" style="color: var(--accent-purple);">Coherence r = 0.000</span>
+          </div>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+            Live simulation of DocLoom's closed-form Kuramoto update. Each dot is an active memory oscillator with phase angle &theta;<sub>i</sub>. Adjust coupling strength <strong>K</strong> to watch dispersed memories pull into phase-locked resonance.
+          </p>
+          <div style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+            <canvas id="kuramoto-canvas" width="300" height="300" style="background: var(--bg-primary); border-radius: var(--radius-md); border: 1px solid var(--border);"></canvas>
+            <div style="flex: 1; min-width: 240px;">
+              <label style="font-size: 13px; font-family: monospace; display: block; margin-bottom: 6px;">
+                Coupling Strength (K): <strong id="kuramoto-k-val" style="color: var(--accent-purple);">0.15</strong>
+              </label>
+              <input type="range" id="kuramoto-k-slider" min="0.0" max="0.8" step="0.02" value="0.15" style="width: 100%; margin-bottom: 14px;">
+              
+              <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6; background: var(--bg-elevated); padding: 12px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                <strong>Formula:</strong> &Delta;&theta;<sub>i</sub> = (K/N) &bull; (cos &theta;<sub>i</sub> &bull; S<sub>1</sub> - sin &theta;<sub>i</sub> &bull; S<sub>2</sub>)<br/>
+                <em>High K = Fast synchronization (soft binding between co-active memories). Low K = Independent phase drift.</em>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sim 2: Mass Momentum Warp -->
+        <div class="card" style="margin-bottom: 24px;">
+          <h3 class="card-title" style="color: var(--accent-teal); margin-bottom: 8px;">2. Procedural Seed Socket vs Semantic Mass Warp</h3>
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+            Drag the mass slider to see how DocLoom procedurally places memories. Low mass shards stay near their 64-bit procedural socket; heavy shards snap to their true semantic vector.
+          </p>
+          <canvas id="warp-canvas" width="700" height="140" style="width: 100%; background: var(--bg-primary); border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 12px;"></canvas>
+          <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 10px;">
+            <label style="font-size: 13px; font-family: monospace; min-width: 140px;">Memory Mass (m):</label>
+            <input type="range" id="warp-mass-slider" min="0.1" max="40" step="0.5" value="1.0" style="flex: 1;">
+          </div>
+          <div id="warp-stats" style="font-size: 12px; font-family: monospace; color: var(--text-muted); background: var(--bg-elevated); padding: 10px; border-radius: 6px;"></div>
+        </div>
+
+        <!-- Sim 3: Warped Newtonian Gravity Curve & LSH Demo -->
+        <div class="grid-2">
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+              <h3 class="card-title" style="color: var(--accent-teal);">3. Warped Newtonian Gravity Curve</h3>
+              <span class="file-meta-pill">m<sub>shard</sub> = <span id="gravity-mass-val">1.0</span></span>
+            </div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+              Notice how gravity explodes as distance (1 - cos) approaches 0. Mass scales the curve, letting heavy core memories outrank closer superficial matches.
+            </p>
+            <canvas id="gravity-canvas" width="400" height="180" style="width: 100%; background: var(--bg-primary); border-radius: var(--radius-md); border: 1px solid var(--border); margin-bottom: 12px;"></canvas>
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <label style="font-size: 12px; font-family: monospace;">Shard Mass:</label>
+              <input type="range" id="gravity-mass-slider" min="0.1" max="5.0" step="0.1" value="1.0" style="flex: 1;">
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title" style="color: var(--accent-green); margin-bottom: 8px;">4. 128-bit LSH Hamming Partition Demo</h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+              Within 32 bit differences out of 128, a shard assimilates into the existing leader bucket. Beyond 32 bits, it accommodates and spawns a new leader neighborhood.
+            </p>
+            <div id="lsh-demo-container"></div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 14px; line-height: 1.6; background: var(--bg-elevated); padding: 10px; border-radius: 6px;">
+              <strong>Fast Recall:</strong> When querying, the brain hashes the query into 128 bits, popcount-scans the leader matrix via LUT in microseconds, and opens only the closest buckets!
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Function Call & Connection Matrix -->
+      <section style="margin-bottom: 48px;" id="connections">
+        <h2 class="section-title">Function Call Matrix <span class="badge">Cross-Module Call Graphs</span></h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3 class="card-title" style="color: var(--accent-teal); margin-bottom: 8px;">Ingest Call Chain</h3>
+            <p style="font-size: 13px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.8;">
+              <strong>WeaveBrainCoordinator.ingest_shard()</strong><br/>
+              ├── UniverseSeedCore.get_micro_socket(shard_id)<br/>
+              ├── LatentFieldPhysicsEngine.calculate_momentum_vector()<br/>
+              ├── GlobalAtlasRouter.route_vector(true_vector)<br/>
+              ├── LoomStore.get_leader_matrix() &amp; _resolve_bucket()<br/>
+              ├── LoomStore.append_shard() [writes .loom binary]<br/>
+              ├── GlobalAtlasRouter.update_centroid()<br/>
+              ├── WeaveBrainCoordinator.process_cognitive_tick()<br/>
+              └── CausalGraphs.record_transition()
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title" style="color: var(--accent-green); margin-bottom: 8px;">Recall Call Chain</h3>
+            <p style="font-size: 13px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.8;">
+              <strong>WeaveBrainCoordinator.recall()</strong><br/>
+              ├── DynamicMemoryFluidity.calculate_decay_batch()<br/>
+              ├── GlobalAtlasRouter.route_vector(query_vector)<br/>
+              ├── LoomStore.get_leader_matrix() &amp; _hamming_distances()<br/>
+              ├── WeaveBrainCoordinator._causal_hop_indices()<br/>
+              ├── LoomStore.gather_vectors() [zero-copy mmap]<br/>
+              ├── LatentFieldPhysicsEngine.calculate_gravitational_attraction_batch()<br/>
+              ├── Closed-form Kuramoto phase angle update [O(N)]<br/>
+              └── LoomStore.get_meta() [decoded only for winners]
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Search & Module Drilldown -->
+      <section style="margin-bottom: 48px;" id="code-drilldown">
+        <h2 class="section-title">Module &amp; File Code-Level Drill Down <span class="badge">Interactive Codebase</span></h2>
+        <div class="search-container">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="global-search" class="search-input" placeholder="Search any file, class, function (e.g. 'ingest_shard', 'Kuramoto', 'LOM2', 'HDC')...">
+        </div>
+
+        <div id="modules-container">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- Binary Storage Layouts -->
+      <section style="margin-bottom: 48px;" id="storage-layouts">
+        <h2 class="section-title">Physical Binary Storage Formats <span class="badge">Disk Structs &amp; Offsets</span></h2>
+        <div id="storage-container">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- Mathematical Formulas -->
+      <section style="margin-bottom: 48px;" id="formulas">
+        <h2 class="section-title">Mechanical Formulas &amp; Physics Kernels <span class="badge">Exact Equations</span></h2>
+        <div id="formulas-container">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- Future Vision & Next-Gen Roadmap -->
+      <section style="margin-bottom: 48px;" id="future-vision">
+        <h2 class="section-title">🚀 Future Vision &amp; Next-Gen Roadmap <span class="badge">Beyond the Current Prototype</span></h2>
+        <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px;">
+          What is <strong>not yet present</strong> in DocLoom today, but constitutes the strategic technical architecture for zero-token edge inference, micro-power NPU deployment, and decentralized swarm intelligence:
+        </p>
+        <div id="future-vision-container">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer style="margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 13px; text-align: center;">
+        DocLoom Cognitive Substrate &bull; Full Architectural Drill-Down Document &bull; Generated for Atri
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="data.js"></script>
+  <script src="simulations.js"></script>
+  <script src="lifecycle_anim.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

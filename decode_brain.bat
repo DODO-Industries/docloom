@@ -15,7 +15,7 @@ if exist "%VENV_PY%" (
 )
 
 cd /d "%SCRIPT_DIR%"
-"%PYTHON_EXE%" -m backend.services.loom_service.decoder.cli %*
+"%PYTHON_EXE%" -m module_loom.services.decoder.cli %*
 
 echo.
 pause

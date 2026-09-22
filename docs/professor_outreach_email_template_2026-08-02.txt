@@ -1,0 +1,75 @@
+COLD EMAIL TEMPLATE — send the one-pager as an attachment, not inline.
+Keep the email body itself under ~150 words. Professors get a lot of these;
+the ones that get read are short, specific, and lead with a real number.
+
+-----------------------------------------------------------------
+Subject: Memory substrate that beats vector search on updating + multi-hop recall — feedback welcome
+
+Dear Professor [Name],
+
+I've been building DocLoom, a living memory substrate for LLMs — an
+append-only store with activation decay and causal-graph consolidation,
+designed to test whether a memory system can stay correct as facts
+change and answer questions a flat vector index structurally cannot.
+
+Two measured results against FAISS on identical data (details attached):
+knowledge updating (current-fact@1: FAISS 0.15 vs DocLoom 1.00) and
+multi-hop recall on cosine-unreachable bridge queries (0.00 vs 0.56).
+
+I'd value your read on the framing — particularly whether the open
+question (does recall quality hold under adversarial, interference-
+dominated growth, with the effect ablated to a specific mechanism) is
+a fit for [your lab's ongoing work on X], and whether it's the kind of
+problem you'd consider supervising or pointing me toward related work
+on.
+
+Happy to share the full re-runnable benchmark harness.
+
+Best,
+[Your name]
+[Your program / year, if applying as a prospective PhD student]
+-----------------------------------------------------------------
+
+FILL IN [Name] AND [your lab's ongoing work on X] PER RECIPIENT.
+A generic "Dear Professor" sent unchanged to 20 people reads as a
+form letter and gets ignored; one sentence tying their actual published
+work to your open question is what gets a reply.
+
+-----------------------------------------------------------------
+WHO TO ACTUALLY SEND THIS TO
+-----------------------------------------------------------------
+I'm not going to hand you a list of names/emails — I have no way to
+verify a real, current, correctly-spelled address, and a guessed one
+either bounces or reads as spam to the wrong person, which costs you
+the first impression. What IS real and easy to verify yourself:
+
+1. Go to arxiv.org and pull up the actual papers this problem statement
+   is positioned against — they're real, and their corresponding
+   author's email is printed on the paper itself:
+     - "HippoRAG" / "HippoRAG 2" (multi-hop retrieval via graph
+       propagation — the closest prior art to your multi-hop result)
+     - "MemGPT" (now the Letta project) and "Generative Agents"
+       (Stanford — recency x importance x relevance scoring, the
+       closest prior art to your activation/gravity mechanism)
+     - "Zep" / "Graphiti" (bi-temporal fact invalidation — the closest
+       prior art to your supersession result; read this one closely,
+       your email should say what's DIFFERENT from it, not ignore it)
+     - "A-MEM", "MemOS", "Nemori" (self-organizing memory stores —
+       the general category DocLoom sits in)
+   Each paper's PDF or arXiv abstract page lists institutional emails.
+   That's a verified, current contact, not a guess.
+
+2. Search Google Scholar for the authors of those papers, confirm their
+   CURRENT affiliation (people move between labs/companies — the paper
+   might be 1-2 years old), and email the address listed on their
+   current lab's official faculty page, not just the paper if it's old.
+
+3. Target 5-8 people, not 50. A short, specific, well-aimed email to
+   people who published adjacent work reads as "this person did their
+   homework." A mass-blast to every AI professor at MIT reads as spam
+   and will very likely get ignored or ding your reputation before you
+   ever apply anywhere.
+
+4. If you want an "industry lab" version of the pitch instead of an
+   academic one (different tone — results-first, shorter, no
+   supervision ask), tell me and I'll draft that variant.

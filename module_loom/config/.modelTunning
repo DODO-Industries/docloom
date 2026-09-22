@@ -1,0 +1,156 @@
+# Field Resonance Dynamics
+INTENT_BIAS_FACTOR=0.5
+INHIBITION_FACTOR=0.15
+VELOCITY_DRAG=0.8
+INPUT_FORCE_GAIN=0.4
+SYNC_FORCE_GAIN=0.2
+WM_EMA_ALPHA=0.1
+REPULSION_CONSTANT=0.02
+REPULSION_RADIUS=0.2
+DRAG_FRICTION=0.7
+
+# Spotlight & Workspace Dynamics
+SPOTLIGHT_GAIN=0.2
+SPOTLIGHT_INERTIA=0.3
+GOAL_ATTENTION_BOOST=1.5
+REHEARSAL_BOOST=1.2
+COMPRESSION_THRESHOLD=0.8
+COMPRESSION_W_STRUCT=0.4
+COMPRESSION_W_SEM=0.4
+COMPRESSION_W_TIME=0.2
+
+# Metacognitive Reflection & Mode Switching
+PRESSURE_THRESHOLD=0.8
+PRESSURE_DECAY=0.85
+SELF_MODEL_EMA_ALPHA=0.05
+REFLECT_W_ENTROPY=0.3
+REFLECT_W_COHERENCE=0.2
+
+# Active Inference & Causal Trajectories
+SURPRISE_DEFAULT=0.25
+SURPRISE_WINDOW_SIZE=100
+CAUSAL_THRESHOLD=0.1
+STALE_DECAY_RATE=0.1
+STALE_PRUNE_THRESHOLD=0.05
+
+# Temporal Cognitive Stream
+CONSOLIDATION_INTERVAL=10
+FATIGUE_RATE=0.08
+FATIGUE_DECAY=0.92
+TRANSITION_MOMENTUM=0.12
+FATIGUE_SCALING=3.0
+ATTRACTOR_EMA=0.15
+
+# Physics Core & Persistent Storage
+SCAFFOLD_WARP=1.0
+GRAVITY_DENOM_OFFSET=1e-4
+WAVE_EXCITATION_GAIN=0.4
+KURAMOTO_COUPLING=0.1
+SLEEP_EVICTION_LIMIT=0.001
+RECALL_BOOST_VALUE=0.15
+MAX_CRYSTAL_SIZE=500000
+MEMORY_DECAY_RATE=0.05
+
+# Recall entry & ranking (tuned after the 2026-07-13 retrieval benchmark)
+# Don't narrow until a crystal is genuinely large enough that full scan costs;
+# below this, always full-scan (accurate). Narrowing traded away recall at 8k.
+RECALL_FULL_SCAN_BELOW=20000
+# When narrowing DOES engage, search more leader neighborhoods — 5 was far too
+# aggressive (R@1 0.13 at 5 vs 0.43 full-scan); 24 recovers most of the recall.
+RECALL_SEED_LEADERS=24
+# Ranking: relevance (gravity, monotonic in similarity) + a monotonic activation
+# nudge. Phase is NOT a ranking signal. 0.25 keeps activation a gentle tie-breaker.
+RANK_ACTIVATION_WEIGHT=0.25
+# Causal spreading-activation boost (multi-hop / associative retrieval). Off by
+# default: sequential-adjacency edges are only informative for narrative/co-access
+# ingest order, not shuffled bulk loads. Raise (e.g. 0.6) for associative corpora.
+# 2026-07-15: spread is now ADDITIVE in score-space (was multiplicative, which
+# could never lift a cosine-distant answer — measured answer@5 0.00->1.00 on the
+# isolated 2-hop bridge benchmark). An answer inherits spread_w * its strongest
+# causal neighbour's score, so it lands just below the direct match.
+CAUSAL_SPREAD_WEIGHT=0.0
+# Minimum cosine a candidate needs before it may SEED the spread — stops every
+# low-relevance filler from leaking score along the sequential-adjacency chain.
+CAUSAL_SPREAD_SEED_MIN=0.2
+# Deferred learning: serving-mode (learn=False) recalls record a cheap trace and
+# consolidate in batches every N queries — reinforcement + Hebbian co-occurrence
+# edges + one cognitive tick. Lower = the brain learns from reads more often (more
+# CPU); higher = faster reads, lazier consolidation. The brain still remembers
+# either way; this only sets HOW OFTEN deferred learning is applied.
+CONSOLIDATE_EVERY=64
+
+# Assembly / semantic-crystal coherence gates (bug #1 fix, 2026-07-15). A shared
+# latent field bundled unrelated co-active topics into one assembly -> one
+# topic-mixed semantic crystal (90-92% were mixed). Members must now cohere
+# (cosine of latent_position) with the group's dominant/centroid anchor above
+# these thresholds. ASSEMBLY_* gates assembly birth; SLEEP_CRYSTAL_* gates the
+# consolidation set just before REM synthesis. Set to 0.0 to disable a gate.
+ASSEMBLY_COHERENCE_MIN=0.5
+SLEEP_CRYSTAL_COHERENCE_MIN=0.5
+
+# Novel-mechanisms proposal (2026-08-02) — replacing fixed thresholds with
+# internal-state signals the substrate already computes about itself.
+#
+# Mechanism 1: a crystal is "full" (stops receiving new ingests, may split)
+# once it's genuinely incoherent (avg cosine-to-centroid below this), not
+# just item count. Crystal routing/centroids are tracked in the raw semantic
+# embedding space (not the physics-blended momentum vector — routing on
+# momentum silently breaks recall the moment >1 crystal exists, since a query
+# has no per-shard scaffold to build an equivalent momentum from; see
+# _route_for_ingest's docstring). MAX_CRYSTAL_SIZE above remains a hard
+# safety ceiling regardless of cohesion. Never applies below
+# MIN_CRYSTAL_SPLIT_SIZE members. Calibrated against real MiniLM semantic
+# embeddings (2026-08-02): single-topic corpora average ~0.31 avg-cosine-to-
+# centroid, genuinely mixed-topic corpora ~0.22 — 0.27 sits between them.
+# HONEST LIMIT (measured 2026-08-02): recall() searches only the ONE crystal
+# a query routes to (a deliberate speed trade-off, not new to this mechanism —
+# MAX_CRYSTAL_SIZE's old count ceiling had the exact same trade-off, it just
+# never fired in practice). Splitting genuinely mixed-topic content into more
+# than a couple of crystals measurably costs self-retrieval R@1 (a query can
+# drift to a sibling crystal's centroid as the split evolves) — this is
+# inherent to single-crystal routing, not a bug. A high MIN_CRYSTAL_SPLIT_SIZE
+# keeps division rare and only for crystals that have had a large, stable
+# sample to prove persistent incoherence, minimizing that cost.
+CRYSTAL_COHESION_MIN=0.27
+MIN_CRYSTAL_SPLIT_SIZE=5000
+
+# Mechanism 2: per-concept expected-vector EMA step size, and the
+# accumulated-surprise level that wakes a sleep cycle early (biological
+# sleep-pressure: consolidate sooner when more was unexpected, not on a timer).
+EXPECTATION_EMA_ALPHA=0.2
+SURPRISE_CONSOLIDATE_THRESHOLD=3.0
+
+# Mechanism 3: below this faithfulness score (fact_coverage * (1-hallucination),
+# from FaithfulnessJudge), an LLM-synthesized sleep-cycle summary retries once
+# through the same synthesis path (which itself falls back to the
+# deterministic template on any LLM failure) instead of shipping ungated.
+SLEEP_FAITHFULNESS_MIN=0.7
+
+# Mechanism 5: ingest-order adjacency only forms a causal edge when the two
+# shards also cohere semantically (cosine of latent_position) — otherwise
+# sequential-adjacency on shuffled bulk data is noise (why CAUSAL_SPREAD_WEIGHT
+# above ships disabled). Set to 0.0 to restore old ingest-order-only behavior.
+CAUSAL_EDGE_COHERENCE_MIN=0.3
+
+# Mechanism 6: retrieval-adequacy self-check. The causal-hop expansion in
+# recall() only runs when the resonance-jump seed set's best cosine is below
+# this — a strong direct hit skips the (otherwise unconditional) hop entirely.
+# Set to 0.0 to always hop (old behavior).
+RETRIEVAL_ADEQUACY_MIN=0.5
+
+# Mechanism 7: additive rank boost (same score-space pattern as
+# CAUSAL_SPREAD_WEIGHT) for a candidate that's been recalled together with an
+# already-relevant seed frequently enough (working_set_pairs) — pure co-use,
+# independent of semantic similarity. Set to 0.0 to disable.
+WORKING_SET_BOOST=0.15
+
+# Emergent Border Embassy & Spatial Physics Dynamics
+EMBASSY_COMPETITIVE_RATIO=0.35
+EMBASSY_MIN_SIMILARITY=0.08
+SPATIAL_CLEARANCE_RADIUS=2.0
+SPATIAL_CLUSTER_RADIUS=38.0
+TESTING_CRYSTAL_SPLIT_SIZE=80
+LTP_ENERGY_BOOST=0.015
+BASE_RESTING_ENERGY=0.15
+BIOLOGICAL_DECAY_LAMBDA=0.55
+

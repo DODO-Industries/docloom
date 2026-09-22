@@ -1,0 +1,111 @@
+DOCLOOM — ONE-PAGE RESEARCH PITCH (for professor outreach)
+2026-08-02. Every number below was re-run live today against a fresh
+benchmark cache — nothing here is recycled from old notes without
+re-verification.
+
+-----------------------------------------------------------------
+PROBLEM
+-----------------------------------------------------------------
+Vector databases (FAISS, HNSW, and the RAG systems built on them) are
+frozen snapshots: you embed a corpus once, build an index, and the
+index's notion of "what's true" never changes unless you rebuild it.
+Two things break under that model, structurally, not as a tuning issue:
+
+  1. UPDATING KNOWLEDGE. When a fact changes (a document is revised, a
+     policy is superseded), a static index has no idea the old vector
+     is stale — it will keep serving it, ranked exactly as confidently
+     as the correction.
+  2. MULTI-HOP / ASSOCIATIVE RECALL. When the correct answer is not
+     textually similar to the query — it's reachable only through an
+     intermediate fact — flat cosine similarity cannot find it at all,
+     by construction, regardless of how the index is tuned.
+
+DocLoom is a living memory substrate (append-only, self-organizing
+storage + a lightweight cognitive layer: activation decay, causal-graph
+edges between co-accessed facts, LLM-driven consolidation) built to
+test whether a memory system can do BOTH of those things a frozen
+index structurally cannot.
+
+-----------------------------------------------------------------
+MEASURED RESULT (re-verified today, same corpus/queries as FAISS)
+-----------------------------------------------------------------
+Two axes where DocLoom beats FAISS not by tuning but by construction:
+
+  UPDATING: 20 facts changed v1->v2, old version marked superseded.
+    current-fact@1:      FAISS 0.15   |   DocLoom 1.00
+    stale-ranked-above-current (wrong answer surfaces first):
+                          FAISS 0.85   |   DocLoom 0.00
+  FAISS has no mechanism for "this vector is outdated" — it will
+  confidently return the wrong, superseded answer 85% of the time.
+
+  MULTI-HOP: answer causally linked to the query but not textually
+  similar to it (genuine 2-hop bridge items, programmatically
+  generated, with a measured isolation check confirming cosine
+  literally cannot reach the answer for the hard subset).
+    answer@5, full set:        cosine 0.55   |   DocLoom 0.80
+    answer@5, hard subset (cosine-unreachable by construction):
+                                cosine 0.00   |   DocLoom 0.56
+
+Where DocLoom currently loses, honestly: raw ingest/query throughput
+(FAISS ~20-40x faster per operation, because it's doing strictly less
+work per item), and a "does recall quality improve as the store grows"
+growth-sweep run today came back NEGATIVE under benign growth (both
+systems' recall dipped similarly as unrelated material was added; the
+store's own self-organization/division mechanism did not engage at the
+tested scale). That result is not hidden here — it's the open question
+below.
+
+-----------------------------------------------------------------
+THE OPEN RESEARCH QUESTION
+-----------------------------------------------------------------
+No published continual-memory system has demonstrated retrieval
+quality that holds or improves as the store grows under ADVERSARIAL,
+interference-dominated growth (streams of contradicting/superseding
+facts at scale), with the improvement causally attributed — via
+ablation — to a specific consolidation mechanism, and independently
+audited for consolidation faithfulness (does the system's own summary
+of what it learned actually match what happened, or does it quietly
+hallucinate). DocLoom already has the two structural ingredients this
+needs (supersession tracking + causal-graph consolidation) and the
+already-measured wins above suggest the mechanism is real — the
+missing piece is the rigorous, adversarial-scale experiment to prove
+(or honestly kill) the growth claim itself.
+
+-----------------------------------------------------------------
+WHY THE GROWTH RESULT WAS NEGATIVE, AND THE ACTUAL CONTRIBUTION
+-----------------------------------------------------------------
+Diagnosing today's negative result surfaced the real gap: every
+reorganization decision in the current system is gated by an arbitrary
+fixed threshold, not a signal derived from the substrate's own state —
+crystals split on a raw item COUNT (500,000), sleep/consolidation fires
+on a CLOCK, a consolidated summary ships regardless of whether a
+faithfulness check would reject it, and forgetting is a silent delete
+with no record of what was known or why it faded.
+
+The proposed contribution is to replace each fixed threshold with a
+signal the substrate already computes about itself:
+  - split a memory region when its internal COHERENCE drops (it got
+    confused), not when its count crosses a number (it got big);
+  - consolidate when a region's accumulated SURPRISE/prediction-error
+    crosses a threshold, not on a clock;
+  - gate consolidation on its own measured FAITHFULNESS score inline
+    (reject/retry a hallucinating synthesis) instead of only reporting
+    it after the fact;
+  - keep a compressed, auditable trace of what was forgotten and why,
+    instead of a bare delete — "graceful forgetting with provenance,"
+    a metric no published memory-store system currently reports.
+
+This is the honest thesis-level claim: not "our physics beats cosine,"
+but "self-organization driven by the substrate's own state beats
+self-organization driven by arbitrary fixed thresholds" — directly
+testable by re-running the growth-sweep once the count-based division
+trigger is replaced with the coherence-based one above.
+
+-----------------------------------------------------------------
+WHAT I'M ASKING FOR
+-----------------------------------------------------------------
+Feedback on this problem framing, and whether it's a fit for
+[thesis supervision / a research collaboration / pointers to closely
+related ongoing work I should read before going further]. Happy to
+share the full benchmark harness (re-runnable, not just numbers in a
+slide) and the honest list of what still doesn't work.

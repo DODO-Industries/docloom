@@ -5,7 +5,7 @@ REM routers if their dependencies are present — app.py mounts each best-effort
 REM and just logs a warning for any that fail to import).
 REM
 REM Runs ONE uvicorn worker, deliberately — NOT --workers N. WeaveBrainCoordinator
-REM and the .loom storage layer (backend/services/loom_service/weaver/substrate_layout.py)
+REM and the .loom storage layer (module_loom/services/weaver/substrate_layout.py)
 REM are single-writer-per-process by design: each uvicorn worker is a separate OS
 REM process with its own independent coordinator and RAM ledger, so multiple workers
 REM would each open the SAME universe.loom/crystal_*.loom files and could interleave

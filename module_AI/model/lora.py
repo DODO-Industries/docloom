@@ -33,8 +33,10 @@ class LoRALinear(nn.Module):
 
     def add_adapter(self, name: str) -> None:
         in_f, out_f = self.base.in_features, self.base.out_features
-        A = nn.Linear(in_f, self.rank, bias=False)
-        B = nn.Linear(self.rank, out_f, bias=False)
+        device = self.base.weight.device
+        dtype = self.base.weight.dtype
+        A = nn.Linear(in_f, self.rank, bias=False, device=device, dtype=dtype)
+        B = nn.Linear(self.rank, out_f, bias=False, device=device, dtype=dtype)
         nn.init.kaiming_uniform_(A.weight, a=math.sqrt(5))
         nn.init.zeros_(B.weight)  # start as a no-op, standard LoRA init
         self.adapters[name] = nn.ModuleDict({"A": A, "B": B})

@@ -31,7 +31,7 @@ if PROJECT_ROOT not in sys.path:
 
 from module_AI.llm_client import LMStudioClient
 
-SERVER = "http://localhost:8001"
+SERVER = os.getenv("DOCLOOM_SERVER", "http://localhost:8000")
 QUESTION_PROMPT_SYSTEM = (
     "You write exactly one short, specific factual question that the given "
     "passage directly answers. Output ONLY the question, nothing else."
@@ -102,13 +102,11 @@ def main():
             try:
                 q = fut.result()
                 done += 1
-                if done % 10 == 0:
-                    elapsed = time.perf_counter() - t0
-                    print(f"done {done}/{len(passages)} ({elapsed:.0f}s, {done/elapsed:.2f}/s) -- last: {q!r}")
+                elapsed = time.perf_counter() - t0
+                print(f"[{done}/{len(passages)}] ({done/max(0.1, elapsed):.2f}/s) Q: {q}", flush=True)
             except Exception as e:
                 failed += 1
-                if failed % 10 == 0:
-                    print(f"failed so far: {failed} (last error: {e})")
+                print(f"[FAILED] {failed} -- Error: {e}", flush=True)
 
     print(f"\nFinished. {done} succeeded, {failed} failed, {time.perf_counter()-t0:.0f}s elapsed.")
 

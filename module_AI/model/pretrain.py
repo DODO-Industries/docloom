@@ -22,7 +22,7 @@ import torch.nn.functional as F
 
 torch.set_num_threads(os.cpu_count())  # default (16) left cores idle on a 22-core box
 
-from module_AI.model.config import DocLoomModelConfig
+from module_AI.model.config import DocLoomModelConfig, get_model_config
 from module_AI.model.docloom_model import DocLoomModel
 from module_AI.model.pretrain_dataset import PretrainDataset, chat_format_examples
 from module_AI.model.batching import collate_batch, lr_lambda, IGNORE_INDEX, make_length_bucketed_batches
@@ -53,11 +53,12 @@ def evaluate(model, val_examples, cfg, device, max_batches=20, batch_size=16):
 
 def pretrain(brain_dir: str, limit: int, epochs: int, lr: float, batch_size: int = 16,
              val_fraction: float = 0.1, log_every: int = 25, eval_every: int = 200,
-             exclude_clusters: list = None, extra_chat_texts: list = None):
-    cfg = DocLoomModelConfig()
+             exclude_clusters: list = None, extra_chat_texts: list = None,
+             model_size: str = "60M"):
+    cfg = get_model_config(model_size)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = DocLoomModel(cfg).to(device)
-    print(f"Model: {model.num_parameters():,} params, device={device}, batch_size={batch_size}")
+    print(f"Model ({model_size}): {model.num_parameters():,} params, device={device}, batch_size={batch_size}")
 
     dataset = PretrainDataset(brain_dir, cfg, limit=limit, exclude_clusters=exclude_clusters)
     examples = list(dataset.examples)
@@ -119,9 +120,13 @@ def pretrain(brain_dir: str, limit: int, epochs: int, lr: float, batch_size: int
     print(f"Final validation loss: {final_val:.4f}")
 
     os.makedirs(CKPT_DIR, exist_ok=True)
-    ckpt_path = os.path.join(CKPT_DIR, "docloom_pretrained_stageA.safetensors")
+    ckpt_path = os.path.join(CKPT_DIR, f"docloom_{model_size.lower()}_stageA.safetensors")
     save_checkpoint(model, ckpt_path)
     print(f"Saved checkpoint: {ckpt_path}")
+    # Also save as default stage A checkpoint for pipeline compatibility
+    alias_path = os.path.join(CKPT_DIR, "docloom_pretrained_stageA.safetensors")
+    save_checkpoint(model, alias_path)
+    print(f"Saved alias checkpoint: {alias_path}")
     return ckpt_path
 
 
@@ -133,6 +138,8 @@ if __name__ == "__main__":
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--batch-size", type=int, default=16)
+    ap.add_argument("--model-size", type=str, default="60M", choices=["20M", "60M", "50M"],
+                     help="Architecture size: 20M (6 layers, 256 embd) or 60M (8 layers, 512 embd)")
     ap.add_argument("--exclude-clusters", type=str, default="",
                      help="comma-separated crystal filenames to skip, e.g. crystal_1_E.loom")
     ap.add_argument("--extra-chat-samples", type=int, default=0,
@@ -154,4 +161,4 @@ if __name__ == "__main__":
 
     pretrain(args.brain_dir, args.limit, args.epochs, args.lr, args.batch_size,
              exclude_clusters=[c.strip() for c in args.exclude_clusters.split(",") if c.strip()],
-             extra_chat_texts=extra_chat_texts)
+             extra_chat_texts=extra_chat_texts, model_size=args.model_size)

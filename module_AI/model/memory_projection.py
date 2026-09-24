@@ -12,16 +12,34 @@ from module_AI.model.config import DocLoomModelConfig
 
 
 class MemoryProjection(nn.Module):
+    """
+    Dual-Stream Physics-Gated Memory Projection (Upgrade A):
+    Stream 1: Content Vector (128d) -> Latent Token Embedding (n_embd).
+    Stream 2: Physics Dynamics (7d: activation, energy, phase, resonance, etc.) -> Gate in [0.5, 1.0].
+    The physics dynamics physically modulate the memory token's attention salience.
+    """
     def __init__(self, cfg: DocLoomModelConfig):
         super().__init__()
         self.cfg = cfg
-        self.fc1 = nn.Linear(cfg.loom_shard_dim, cfg.memory_hidden_dim)
+        self.content_fc1 = nn.Linear(cfg.loom_content_dim, cfg.memory_hidden_dim)
+        self.content_fc2 = nn.Linear(cfg.memory_hidden_dim, cfg.n_embd)
+        
+        self.physics_fc1 = nn.Linear(cfg.loom_physics_dim, 64)
+        self.physics_fc2 = nn.Linear(64, cfg.n_embd)
         self.act = nn.GELU()
-        self.fc2 = nn.Linear(cfg.memory_hidden_dim, cfg.n_embd)
 
     def forward(self, shard_features: torch.Tensor) -> torch.Tensor:
         """shard_features: (batch, n_memory_tokens, loom_shard_dim) -> (batch, n_memory_tokens, n_embd)"""
-        return self.fc2(self.act(self.fc1(shard_features)))
+        c_dim = self.cfg.loom_content_dim
+        content = shard_features[..., :c_dim]
+        physics = shard_features[..., c_dim:]
+        
+        content_embed = self.content_fc2(self.act(self.content_fc1(content)))
+        physics_gate = torch.sigmoid(self.physics_fc2(self.act(self.physics_fc1(physics))))
+        
+        # Physics modulation: highly active/resonant shards achieve full salience (1.0x),
+        # while low-energy background shards are softly attenuated (0.5x).
+        return content_embed * (0.5 + 0.5 * physics_gate)
 
 
 def pack_shard_features(excited_shards, cfg: DocLoomModelConfig) -> torch.Tensor:

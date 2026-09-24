@@ -21,6 +21,7 @@ for _name, _path in [
     ("embedding", "module_loom.routes.embedding_routes"),
     ("neuro_visualizer", "module_loom.routes.visualizer_routes"),
     ("testing_visualizer", "module_loom.routes.testing_routes"),
+    ("ai", "module_AI.routes"),
 ]:
     try:
         _mod = __import__(_path, fromlist=["router"])
@@ -67,6 +68,11 @@ for _name, _router in _routers:
 LIBS_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "module_loom", "utils", "webVisualizer", "libs"))
 if os.path.exists(LIBS_DIR):
     app.mount("/libs", StaticFiles(directory=LIBS_DIR), name="libs")
+
+# Static assets for the Testing Sandbox (CSS, JS engine)
+TESTING_STATIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "module_loom", "test", "static"))
+if os.path.exists(TESTING_STATIC_DIR):
+    app.mount("/loom/testing/static", StaticFiles(directory=TESTING_STATIC_DIR), name="testing-static")
 
 @app.get("/")
 async def root():

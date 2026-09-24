@@ -26,14 +26,18 @@ def save_checkpoint(model, path: str) -> None:
         json.dump(model.cfg.__dict__, f, indent=2)
 
 
-def load_checkpoint(model_cls, config_cls, path: str, device: str = "cpu"):
+def load_checkpoint(model_cls, config_cls, path: str, device: str = "cpu", strict: bool = True):
     """Reconstructs a fresh model from its config + safetensors weights.
     If the checkpoint has LoRA adapters (Stage 4), re-adds them by name
     before loading — a freshly-built model has no adapter submodules, so
     load_model would otherwise fail on missing keys."""
     with open(path + ".config.json", "r", encoding="utf-8") as f:
         cfg_dict = json.load(f)
-    cfg = config_cls(**cfg_dict)
+
+    # Safely filter config keys to handle dataclass schema additions
+    valid_fields = getattr(config_cls, "__dataclass_fields__", {})
+    filtered_cfg = {k: v for k, v in cfg_dict.items() if k in valid_fields} if valid_fields else cfg_dict
+    cfg = config_cls(**filtered_cfg)
     model = model_cls(cfg)
 
     adapter_names = set()
@@ -46,5 +50,13 @@ def load_checkpoint(model_cls, config_cls, path: str, device: str = "cpu"):
         model.add_adapter(name)
         model.use_adapter(name)
 
-    load_model(model, path, device=device)
+    try:
+        load_model(model, path, device=device, strict=strict)
+    except Exception as e:
+        if strict:
+            # Fallback for progressive architecture upgrades (e.g. adding cross-attention)
+            load_model(model, path, device=device, strict=False)
+        else:
+            raise e
     return model
+

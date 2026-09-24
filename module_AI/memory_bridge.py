@@ -40,6 +40,8 @@ class LoomMemory:
             coordinator = get_coordinator()
         self.coordinator = coordinator
         self.model = get_embedding_model()
+        import threading
+        self._lock = threading.Lock()
 
     def embed(self, text: str) -> np.ndarray:
         raw = np.asarray(self.model.encode([text])[0], dtype=np.float32)
@@ -53,7 +55,22 @@ class LoomMemory:
 
     def recall(self, text: str, top_k: int = 5, learn: bool = False) -> List[Dict[str, Any]]:
         vec = self.embed(text)
-        return self.coordinator.recall(vec, top_k=top_k, learn=learn) or []
+        with self._lock:
+            return self.coordinator.recall(vec, top_k=top_k, learn=learn) or []
+
+    def recall_distilled(self, text: str, candidate_pool: int = 16, top_k: int = 8,
+                         learn: bool = False, candidate_k: Optional[int] = None,
+                         session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        pool = candidate_k if candidate_k is not None else candidate_pool
+        vec = self.embed(text)
+        with self._lock:
+            if hasattr(self.coordinator, "recall_multi_pass"):
+                return self.coordinator.recall_multi_pass(
+                    vec, candidate_pool=pool, top_k=top_k, learn=learn, session_id=session_id
+                )
+            return self.coordinator.recall(vec, top_k=top_k, learn=learn) or []
+
+
 
     def remember(self, text: str, metadata: Optional[Dict[str, Any]] = None, mass: float = 1.0,
                  vector: Optional[np.ndarray] = None) -> str:
@@ -61,7 +78,8 @@ class LoomMemory:
         shard_id = (metadata or {}).get("shard_id") or hashlib.sha256(
             f"{text}|{time.time_ns()}".encode("utf-8")
         ).hexdigest()[:24]
-        self.coordinator.ingest_shard(shard_id, vec, text, mass=mass, metadata=metadata)
+        with self._lock:
+            self.coordinator.ingest_shard(shard_id, vec, text, mass=mass, metadata=metadata)
         return shard_id
 
     def get_shard_physics(self, shard_id: str) -> Dict[str, float]:
@@ -72,19 +90,20 @@ class LoomMemory:
         richer memory-token input (roadmap Stage 1) and the training-data log.
         Returns {} if the shard isn't in the active ledger (e.g. cold/evicted).
         """
-        entry = self.coordinator.ram_ledger.get(shard_id)
-        if not entry:
-            return {}
-        return {
-            "activation": float(entry.get("activation", 0.0)),
-            "energy": float(entry.get("energy", 0.0)),
-            "phase_angle": float(entry.get("phase_angle", 0.0)),
-            "momentum": float(entry.get("momentum", 0.0)),
-            "stability": float(entry.get("stability", 0.0)),
-            "resonance": float(entry.get("resonance", 0.0)),
-            "attention": float(entry.get("attention", 0.0)),
-            "hits": int(entry.get("hits", 0)),
-        }
+        with self._lock:
+            entry = self.coordinator.ram_ledger.get(shard_id)
+            if not entry:
+                return {}
+            return {
+                "activation": float(entry.get("activation", 0.0)),
+                "energy": float(entry.get("energy", 0.0)),
+                "phase_angle": float(entry.get("phase_angle", 0.0)),
+                "momentum": float(entry.get("momentum", 0.0)),
+                "stability": float(entry.get("stability", 0.0)),
+                "resonance": float(entry.get("resonance", 0.0)),
+                "attention": float(entry.get("attention", 0.0)),
+                "hits": int(entry.get("hits", 0)),
+            }
 
     def stats(self) -> Dict[str, Any]:
         return {

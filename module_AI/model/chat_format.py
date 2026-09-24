@@ -12,6 +12,10 @@ Stage B's QA data so the frozen base learns the structure natively.
 CONTEXT_TAG = "<|context|>"
 USER_TAG = "<|user|>"
 ASSISTANT_TAG = "<|assistant|>"
+THINK_TAG = "<|think|>"
+END_THINK_TAG = "</|think|>"
+EVIDENCE_TAG = "<|evidence|>"
+ANSWER_TAG = "<|answer|>"
 END_TAG = "<|end|>"
 
 
@@ -26,6 +30,13 @@ def format_prompt(question: str, context_snippets: list = ()) -> str:
     return f"{format_context(list(context_snippets))}{USER_TAG}\n{question}\n{ASSISTANT_TAG}\n"
 
 
-def format_turn(question: str, answer: str, context_snippets: list = ()) -> str:
-    """A full training example: prompt + answer + end tag."""
-    return f"{format_prompt(question, context_snippets)}{answer}{END_TAG}"
+def format_turn(question: str, answer: str, context_snippets: list = (), evidence: str = "", thought: str = "") -> str:
+    """A full structured training example: prompt + thinking/evidence + answer + end tag."""
+    if thought:
+        body = f"{THINK_TAG}\n{thought}\n{END_THINK_TAG}\n{ANSWER_TAG}\n{answer}"
+    elif evidence:
+        body = f"{EVIDENCE_TAG}\n{evidence}\n{ANSWER_TAG}\n{answer}"
+    else:
+        body = answer
+    return f"{format_prompt(question, context_snippets)}{body}{END_TAG}"
+

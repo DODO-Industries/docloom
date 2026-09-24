@@ -67,16 +67,57 @@ class MLP(nn.Module):
         return self.dropout(self.proj(self.act(self.fc(x))))
 
 
+class MemoryCrossAttention(nn.Module):
+    """
+    Cross-attention to Loom's memory tokens (Upgrade B).
+    Queries come from the current sequence tokens;
+    Keys and Values come from the Loom Memory Tokens.
+    """
+    def __init__(self, cfg: DocLoomModelConfig):
+        super().__init__()
+        assert cfg.n_embd % cfg.n_head == 0
+        self.n_head = cfg.n_head
+        self.head_dim = cfg.n_embd // cfg.n_head
+        self.q = LoRALinear(nn.Linear(cfg.n_embd, cfg.n_embd), cfg.lora_rank, cfg.lora_alpha)
+        self.kv = LoRALinear(nn.Linear(cfg.n_embd, 2 * cfg.n_embd), cfg.lora_rank, cfg.lora_alpha)
+        self.proj = LoRALinear(nn.Linear(cfg.n_embd, cfg.n_embd), cfg.lora_rank, cfg.lora_alpha)
+        self.dropout = cfg.dropout
+
+    def forward(self, x: torch.Tensor, memory_tokens: torch.Tensor) -> torch.Tensor:
+        b, t, c = x.shape
+        _, m, _ = memory_tokens.shape
+        q = self.q(x).view(b, t, self.n_head, self.head_dim).transpose(1, 2)
+        kv = self.kv(memory_tokens)
+        k, v = kv.split(c, dim=2)
+        k = k.view(b, m, self.n_head, self.head_dim).transpose(1, 2)
+        v = v.view(b, m, self.n_head, self.head_dim).transpose(1, 2)
+
+        att = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        att = F.softmax(att, dim=-1)
+        att = F.dropout(att, p=self.dropout, training=self.training)
+        out = att @ v
+        out = out.transpose(1, 2).contiguous().view(b, t, c)
+        return self.proj(out)
+
+
 class Block(nn.Module):
     def __init__(self, cfg: DocLoomModelConfig):
         super().__init__()
+        self.cfg = cfg
         self.ln1 = nn.LayerNorm(cfg.n_embd)
         self.attn = CausalSelfAttention(cfg)
         self.ln2 = nn.LayerNorm(cfg.n_embd)
         self.mlp = MLP(cfg)
+        self.use_cross_attention = getattr(cfg, "use_cross_attention", False)
+        if self.use_cross_attention:
+            self.ln_cross = nn.LayerNorm(cfg.n_embd)
+            self.cross_attn = MemoryCrossAttention(cfg)
 
-    def forward(self, x: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None,
+                memory_tokens: Optional[torch.Tensor] = None) -> torch.Tensor:
         x = x + self.attn(self.ln1(x), key_padding_mask)
+        if self.use_cross_attention and memory_tokens is not None:
+            x = x + self.cross_attn(self.ln_cross(x), memory_tokens)
         x = x + self.mlp(self.ln2(x))
         return x
 
@@ -97,18 +138,21 @@ class Backbone(nn.Module):
         self.head = nn.Linear(cfg.n_embd, cfg.vocab_size, bias=False)
         self.head.weight = self.tok_emb.weight  # weight tying
 
-    def forward(self, inputs_embeds: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """inputs_embeds: (batch, seq_len, n_embd) — already-embedded sequence
-        (memory tokens concatenated with token embeddings), see docloom_model.py.
-        key_padding_mask: (batch, seq_len) bool, True = real token — required
-        once a batch mixes examples of different lengths (padding needed)."""
+    def forward(self, inputs_embeds: torch.Tensor, key_padding_mask: Optional[torch.Tensor] = None,
+                memory_tokens: Optional[torch.Tensor] = None, return_hidden: bool = False):
+        """inputs_embeds: (batch, seq_len, n_embd) — already-embedded sequence.
+        memory_tokens: (batch, n_memory_tokens, n_embd) — direct cross-attention target.
+        return_hidden: if True, returns (logits, hidden_states)."""
         b, t, _ = inputs_embeds.shape
         pos = torch.arange(t, device=inputs_embeds.device).unsqueeze(0)
         x = self.drop(inputs_embeds + self.pos_emb(pos))
         for block in self.blocks:
-            x = block(x, key_padding_mask)
+            x = block(x, key_padding_mask, memory_tokens)
         x = self.ln_f(x)
-        return self.head(x)  # (batch, seq_len, vocab_size)
+        logits = self.head(x)
+        if return_hidden:
+            return logits, x
+        return logits
 
     def embed_tokens(self, token_ids: torch.Tensor) -> torch.Tensor:
         return self.tok_emb(token_ids)
